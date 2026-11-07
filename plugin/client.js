@@ -162,6 +162,20 @@ window.__ModuleLoader__.load({
         }
       };
 
+      const createShortcut = async () => {
+        setBusy(true);
+        try {
+          const result = await postJson("/dsh-switch/shortcut", {});
+          setNotice(result.ok
+            ? `快捷方式已创建：${result.body.path}`
+            : `创建失败：${result.body.error || result.status}`);
+        } catch (error) {
+          setNotice(String(error && error.message ? error.message : error));
+        } finally {
+          setBusy(false);
+        }
+      };
+
       return h("div", { style: pageStyle },
         h("div", { style: sectionStyle },
           h("p", { style: sectionTitleStyle }, "切换成功后的上报"),
@@ -222,6 +236,12 @@ window.__ModuleLoader__.load({
             h("input", { type: "checkbox", checked: network.loopbackOnly === true, onChange: (e) => setNetwork("loopbackOnly", e.target.checked) }),
             "只绑定回环（不启动 relay）"),
           h("p", { style: helpStyle }, "勾上后完全不发布到局域网。DSH 不允许监听 0.0.0.0，这里也不接受。")),
+
+        h("div", { style: sectionStyle },
+          h("p", { style: sectionTitleStyle }, "启动器快捷方式"),
+          h("p", { style: helpStyle }, "在桌面创建一个指向启动器的快捷方式；双击它等于运行 dsh-switch（无参数菜单），以后不必再开终端敲命令。"),
+          h("div", { style: actionsStyle },
+            h("button", { style: pageButton, disabled: busy, onClick: createShortcut }, "创建桌面快捷方式"))),
 
         h("div", { style: actionsStyle },
           h("button", { style: pageButton, disabled: busy || !loaded, onClick: save }, "保存"),

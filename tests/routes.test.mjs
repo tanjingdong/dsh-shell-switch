@@ -67,6 +67,26 @@ test('state omits the shell when the host cannot detect it', async () => {
   assert.equal(JSON.parse(res.body).current, undefined)
 })
 
+test('the shortcut route creates the launcher shortcut and reports its path', async () => {
+  const routes = createHandoffRoutes({
+    now: () => 1, random: () => 'n', spawnLauncher: () => 1,
+    createShortcut: async () => 'C:\\Users\\x\\Desktop\\DSH 外壳切换.lnk',
+  })
+  const res = await routes.handle('POST', '/dsh-switch/shortcut', headers, loop, '{}')
+  assert.equal(res.status, 200)
+  assert.match(res.body, /Desktop/)
+})
+
+test('a failing shortcut creation is reported as 502', async () => {
+  const routes = createHandoffRoutes({
+    now: () => 1, random: () => 'n', spawnLauncher: () => 1,
+    createShortcut: async () => { throw new Error('denied') },
+  })
+  const res = await routes.handle('POST', '/dsh-switch/shortcut', headers, loop, '{}')
+  assert.equal(res.status, 502)
+  assert.match(res.body, /denied/)
+})
+
 test('the interfaces route reports the detected local IPv4 interfaces', async () => {
   const routes = createHandoffRoutes({
     now: () => 1, random: () => 'n', spawnLauncher: () => 1,

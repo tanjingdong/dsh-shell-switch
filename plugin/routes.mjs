@@ -72,6 +72,7 @@ export function createHandoffRoutes({
   writeConfig = null,
   sendTest = null,
   readInterfaces = localInterfaces,
+  createShortcut = null,
 } = {}) {
   let nonce = null
   let expiresAt = 0
@@ -135,6 +136,18 @@ export function createHandoffRoutes({
 
         if (method === 'POST' && url === '/dsh-switch/report-config') {
           return respond(() => saveConfig(body))
+        }
+
+        if (method === 'POST' && url === '/dsh-switch/shortcut') {
+          return respond(async () => {
+            if (typeof createShortcut !== 'function') return json(502, { ok: false, error: 'shortcut-unavailable' })
+            try {
+              const created = await createShortcut()
+              return json(200, { ok: true, path: created })
+            } catch (error) {
+              return json(502, { ok: false, error: String(error?.message ?? error) })
+            }
+          })
         }
 
         if (method === 'GET' && url === '/dsh-switch/interfaces') {
