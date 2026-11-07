@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { noopNotice, parseArgs, preferredPortFor, renderMenu, statusLine, stopNotice, switchWithConsent } from '../src/cli.mjs'
+import { noopNotice, parseArgs, preferredPortFor, renderMenu, statusLine, stopNotice, stopResultLine, switchWithConsent } from '../src/cli.mjs'
 
 test('parseArgs defaults to menu and accepts --force and --now', () => {
   assert.deepEqual(parseArgs([]), { command: 'menu', force: false, now: false })
@@ -23,6 +23,14 @@ test('renderMenu lists the four choices', () => {
   assert.match(menu, /2\).*Web/)
   assert.match(menu, /3\).*状态/)
   assert.match(menu, /4\).*停止/)
+})
+
+test('stop says what it ended, by name and pid', () => {
+  assert.match(stopResultLine({ current: 'client', killed: [11, 10] }), /桌面客户端.*2 个进程.*11.*10/)
+  assert.match(stopResultLine({ current: 'web', killed: [20] }), /浏览器 Web.*1 个进程.*20/)
+  assert.equal(stopResultLine({ current: null, killed: [] }), '没有外壳在运行')
+  assert.match(stopResultLine({ current: null, killed: [30] }), /relay.*30/)
+  assert.match(stopResultLine({ current: 'web', killed: [] }), /已经不在了/)
 })
 
 test('a switch to the shell that is already running says so', () => {

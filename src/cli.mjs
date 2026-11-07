@@ -42,6 +42,17 @@ export function noopNotice(current) {
   return `当前已经是${current === 'client' ? '桌面客户端' : '浏览器 Web'}，无需切换`
 }
 
+/** What `stop` ended, in words a user can check against the task list. */
+export function stopResultLine({ current, killed = [] } = {}) {
+  const label = current === 'client' ? '桌面客户端' : current === 'web' ? '浏览器 Web' : null
+  const pids = killed.join('、')
+  if (!current) {
+    return killed.length > 0 ? `已结束残留的 relay 进程（pid ${pids}）` : '没有外壳在运行'
+  }
+  if (killed.length === 0) return `${label}的进程已经不在了，无需停止`
+  return `已停止${label}（结束 ${killed.length} 个进程：${pids}）`
+}
+
 /** One status line, including the token url when the state recorded one. */
 export function statusLine(info = {}) {
   const current = info.current ?? '没有外壳在运行'
@@ -168,18 +179,14 @@ export async function run(argv = process.argv.slice(2), overrides = {}) {
       paths, state, current, timeoutMs: now ? 0 : 10000,
     })
     if (!result.current && result.killed.length === 0) {
-      write('没有外壳在运行')
+      write(stopResultLine(result))
       return 0
     }
     await writeState(paths.stateFile, {
       ...state, mode: result.current, stoppedAt: new Date().toISOString(),
     })
-    if (!result.current) {
-      write('已结束残留的 relay 进程')
-      return 0
-    }
-    write(result.killed.length > 0 ? '已停止' : '停止失败，进程仍然存在')
-    return result.killed.length > 0 ? 0 : 1
+    write(stopResultLine(result))
+    return result.killed.length > 0 || !result.current ? 0 : 1
   }
 
   const preferredPort = preferredPortFor(resolved, state)
