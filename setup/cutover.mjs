@@ -47,3 +47,15 @@ export async function revertCutover({ profilesDir, backupPath }) {
   await fs.rm(web, { force: true })
   if (backupPath) await fs.rename(backupPath, web)
 }
+
+if (process.argv[1]?.endsWith('cutover.mjs')) {
+  const { resolvePaths } = await import('../src/paths.mjs')
+  const { profilesDir } = resolvePaths()
+  applyCutover({ profilesDir })
+    .then((plan) => process.stdout.write(
+      plan.steps.length === 0
+        ? 'web 已经是联接，无需改动\n'
+        : `已建立联接；原目录备份为 ${plan.backupPath ?? '(无)'}\n`,
+    ))
+    .catch((error) => { process.stderr.write(`${error.message}\n`); process.exit(1) })
+}
