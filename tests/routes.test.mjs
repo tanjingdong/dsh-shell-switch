@@ -27,6 +27,16 @@ test('handoff accepts a fresh nonce once and refuses reuse', () => {
   assert.equal(again.status, 403)
 })
 
+test('state treats jobs, a waiting inbox and approvals as busy', () => {
+  const busy = (activity) => JSON.parse(createHandoffRoutes({
+    now: () => 1, random: () => 'n', spawnLauncher: () => 1, readActivity: () => activity,
+  }).handle('GET', '/dsh-switch/state', headers, loop).body).busy
+  assert.equal(busy({ agents: 0, jobs: 2, inbox: false, approvals: 0 }), true)
+  assert.equal(busy({ agents: 0, jobs: 0, inbox: true, approvals: 0 }), true)
+  assert.equal(busy({ agents: 0, jobs: 0, inbox: false, approvals: 1 }), true)
+  assert.equal(busy({ agents: 0, jobs: 0, inbox: false, approvals: 0 }), false)
+})
+
 test('a failing launcher spawn becomes 500 instead of throwing', () => {
   const routes = createHandoffRoutes({ now: () => 1000, random: () => 'n1', spawnLauncher: () => { throw new Error('nope') }, readActivity: () => ({ agents: 0, jobs: 0 }) })
   routes.handle('GET', '/dsh-switch/state', headers, loop)

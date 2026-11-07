@@ -1,5 +1,6 @@
 import readline from 'node:readline/promises'
 import { LauncherError } from './errors.mjs'
+import { createLogger } from './log.mjs'
 import { assertInstalled, resolvePaths } from './paths.mjs'
 import { reservePort } from './ports.mjs'
 import { readState, writeState } from './state.mjs'
@@ -81,34 +82,32 @@ export async function switchWithConsent(target, deps, {
   }
 }
 
-function log(message) {
-  process.stdout.write(`${message}\n`)
-}
-
 /** Run one command and return the process exit code. */
 export async function run(argv = process.argv.slice(2), overrides = {}) {
   const { command, force } = overrides.parsed ?? parseArgs(argv)
   const paths = overrides.paths ?? resolvePaths()
   assertInstalled(paths)
+  const logger = overrides.logger ?? createLogger({ paths })
+  const write = (message) => logger.log(message)
   const state = await readState(paths.stateFile)
   const resolved = command === 'menu' ? await promptChoice() : command
 
   if (resolved === 'status') {
     const info = await status({ paths, state })
-    log(`当前：${info.current ?? '没有外壳在运行'}${info.port ? `（端口 ${info.port}）` : ''}`)
+    write(`当前：${info.current ?? '没有外壳在运行'}${info.port ? `（端口 ${info.port}）` : ''}`)
     return 0
   }
 
   if (resolved === 'stop') {
     const result = await stopEverything({ paths, state })
     if (!result.current) {
-      log('没有外壳在运行')
+      write('没有外壳在运行')
       return 0
     }
     await writeState(paths.stateFile, {
       ...state, mode: result.current, stoppedAt: new Date().toISOString(),
     })
-    log(result.killed.length > 0 ? '已停止' : '停止失败，进程仍然存在')
+    write(result.killed.length > 0 ? '已停止' : '停止失败，进程仍然存在')
     return result.killed.length > 0 ? 0 : 1
   }
 
@@ -116,14 +115,14 @@ export async function run(argv = process.argv.slice(2), overrides = {}) {
   const busyPort = await currentHostPort({ paths, state })
 
   await switchWithConsent(resolved, {
-    paths, force, log,
+    paths, force, log: write,
     port: preferredPort,
     pickPort: () => reservePort(preferredPort),
-    prepare: async () => log('预检通过'),
+    prepare: async () => write('预检通过'),
     busyProbe: async () => (busyPort ? fetchBusy({ port: busyPort }) : null),
     startWeb: async ({ port }) => {
       const result = await startWeb({
-        paths, port, addresses: LAN_ADDRESSES, log,
+        paths, port, addresses: LAN_ADDRESSES, log: write,
         onSpawn: (pid) => writeState(paths.stateFile, {
           mode: 'web', pid, port, startedAt: new Date().toISOString(),
         }),
@@ -147,8 +146,10 @@ export async function run(argv = process.argv.slice(2), overrides = {}) {
 }
 
 if (process.argv[1]?.endsWith('cli.mjs')) {
-  run().then((code) => process.exit(code)).catch((error) => {
-    process.stderr.write(`\n${error?.message ?? error}\n`)
+  const logger = createLogger({ paths: resolvePaths() })
+  run(process.argv.slice(2), { logger }).then((code) => process.exit(code)).catch((error) => {
+    logger.error(`\n${error?.message ?? error}`)
+    logger.error(`日志：${logger.file}`)
     process.exit(1)
   })
 }

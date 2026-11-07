@@ -42,7 +42,12 @@ export function createHandoffRoutes({
           const known = activity !== null && typeof activity === 'object'
           const agents = known ? Number(activity.agents ?? 0) : 0
           const jobs = known ? Number(activity.jobs ?? 0) : 0
-          return json(200, { busy: agents > 0 || jobs > 0, known, agents, jobs, nonce })
+          const inbox = known && activity.inbox === true
+          const approvals = known ? Number(activity.approvals ?? 0) : 0
+          return json(200, {
+            busy: agents > 0 || jobs > 0 || inbox || approvals > 0,
+            known, agents, jobs, inbox, approvals, nonce,
+          })
         }
 
         if (method === 'POST' && url === '/dsh-switch/handoff') {
