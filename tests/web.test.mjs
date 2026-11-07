@@ -29,6 +29,27 @@ test('waitReady returns false after the deadline', async () => {
   assert.equal(await waitReady({ port: 1, timeoutMs: 30, probe: async () => false }), false)
 })
 
+test('waitReady requires an HTTP answer, not only an accepted TCP connection', async () => {
+  assert.equal(
+    await waitReady({ port: 1, timeoutMs: 30, intervalMs: 1, probe: async () => true, httpProbe: async () => false }),
+    false,
+  )
+  assert.equal(
+    await waitReady({ port: 1, timeoutMs: 30, intervalMs: 1, probe: async () => true, httpProbe: async () => true }),
+    true,
+  )
+})
+
+test('waitReady probes HTTP only after TCP accepts', async () => {
+  let httpCalls = 0
+  await waitReady({
+    port: 1, timeoutMs: 20, intervalMs: 1,
+    probe: async () => false,
+    httpProbe: async () => { httpCalls += 1; return true },
+  })
+  assert.equal(httpCalls, 0)
+})
+
 test('startWeb records the pid before waiting, then relays and opens the browser', async () => {
   const order = []
   let opened = null

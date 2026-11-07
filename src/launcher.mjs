@@ -25,6 +25,8 @@ export async function fetchBusy({ port, fetchImpl = globalThis.fetch, timeoutMs 
     })
     if (!response.ok) return null
     const body = await response.json()
+    // An unreachable registry answers known:false; that is not "idle".
+    if (body?.known === false) return null
     return body?.busy === true
   } catch {
     return null
@@ -136,6 +138,22 @@ export async function switchTo(target, deps) {
     `${target} 连续 3 次启动失败：${lastError?.message ?? lastError}\n`
     + '现在没有任何外壳在运行。可重试：dsh-switch web  或  dsh-switch client',
   )
+}
+
+/**
+ * Stop whatever shell owns the machine right now, plus the relay the launcher
+ * recorded. The process list is the source of truth: a client started before
+ * pid recording existed still gets stopped.
+ */
+export async function stopEverything({ paths, state, list = listProcesses, kill = killTree }) {
+  const current = await detectCurrent({ paths, list })
+  if (!current) return { current: null, killed: [] }
+  const killed = await stopShell({ current, paths, list, kill })
+  if (state?.relayPid && !killed.includes(state.relayPid)) {
+    await kill(state.relayPid, { force: true }).catch(() => {})
+    killed.push(state.relayPid)
+  }
+  return { current, killed }
 }
 
 /** Report what is running right now. */

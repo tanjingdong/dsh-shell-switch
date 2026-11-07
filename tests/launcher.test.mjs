@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { switchTo, fetchBusy, detectCurrent, startClient, stopShell, waitForClient } from '../src/launcher.mjs'
+import { switchTo, fetchBusy, detectCurrent, startClient, stopEverything, stopShell, waitForClient } from '../src/launcher.mjs'
 
 const clientPaths = {
   desktopProfile: 'C:\\u\\.dsh\\profiles\\desktop',
@@ -50,6 +50,44 @@ test('switchTo refuses when activity cannot be confirmed and force is absent', a
 test('fetchBusy returns null when the state route is unreachable', async () => {
   const fetchImpl = async () => { throw new Error('ECONNREFUSED') }
   assert.equal(await fetchBusy({ port: 1, fetchImpl }), null)
+})
+
+test('fetchBusy treats an unconfirmed state as unknown instead of idle', async () => {
+  const unconfirmed = async () => ({ ok: true, json: async () => ({ busy: false, known: false }) })
+  assert.equal(await fetchBusy({ port: 1, fetchImpl: unconfirmed }), null)
+  const idle = async () => ({ ok: true, json: async () => ({ busy: false, known: true }) })
+  assert.equal(await fetchBusy({ port: 1, fetchImpl: idle }), false)
+  const busy = async () => ({ ok: true, json: async () => ({ busy: true, known: true }) })
+  assert.equal(await fetchBusy({ port: 1, fetchImpl: busy }), true)
+})
+
+test('stopEverything stops a client the launcher never recorded a pid for', async () => {
+  const killed = []
+  const result = await stopEverything({
+    paths: clientPaths,
+    state: { mode: 'client', pid: 0 },
+    list: async () => [electronShell, desktopHost],
+    kill: async (pid) => { killed.push(pid) },
+  })
+  assert.equal(result.current, 'client')
+  assert.deepEqual(killed, [11, 10])
+})
+
+test('stopEverything also ends the relay process recorded in the state', async () => {
+  const killed = []
+  const webHost = { pid: 20, commandLine: 'x\\cli.js web --host 127.0.0.1 --port 3080' }
+  await stopEverything({
+    paths: clientPaths,
+    state: { mode: 'web', pid: 20, relayPid: 30 },
+    list: async () => [webHost],
+    kill: async (pid) => { killed.push(pid) },
+  })
+  assert.deepEqual(killed, [20, 30])
+})
+
+test('stopEverything reports nothing running when no shell is detected', async () => {
+  const result = await stopEverything({ paths: clientPaths, state: null, list: async () => [], kill: async () => {} })
+  assert.deepEqual(result, { current: null, killed: [] })
 })
 
 test('switchTo re-picks the port before every attempt', async () => {

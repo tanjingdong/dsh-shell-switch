@@ -2,9 +2,8 @@ import readline from 'node:readline/promises'
 import { LauncherError } from './errors.mjs'
 import { assertInstalled, resolvePaths } from './paths.mjs'
 import { reservePort } from './ports.mjs'
-import { killTree } from './procs.mjs'
 import { readState, writeState } from './state.mjs'
-import { fetchBusy, startClient, status, switchTo } from './launcher.mjs'
+import { fetchBusy, startClient, status, stopEverything, switchTo } from './launcher.mjs'
 import { startWeb } from './web.mjs'
 
 const COMMANDS = ['menu', 'client', 'web', 'status', 'stop']
@@ -73,18 +72,16 @@ export async function run(argv = process.argv.slice(2), overrides = {}) {
   }
 
   if (resolved === 'stop') {
-    const info = await status({ paths, state })
-    if (!info.current) {
+    const result = await stopEverything({ paths, state })
+    if (!result.current) {
       log('没有外壳在运行')
       return 0
     }
-    const pid = state?.pid ?? info.pid
-    if (!pid) throw new LauncherError('no-pid', '找不到要停止的进程')
-    if (state?.relayPid) await killTree(state.relayPid, { force: true }).catch(() => {})
-    const result = await killTree(pid, { force: true })
-    await writeState(paths.stateFile, { ...state, mode: info.current, stoppedAt: new Date().toISOString() })
-    log(result.killed ? '已停止' : '停止失败，进程仍然存在')
-    return result.killed ? 0 : 1
+    await writeState(paths.stateFile, {
+      ...state, mode: result.current, stoppedAt: new Date().toISOString(),
+    })
+    log(result.killed.length > 0 ? '已停止' : '停止失败，进程仍然存在')
+    return result.killed.length > 0 ? 0 : 1
   }
 
   const preferredPort = state?.port ?? 3080

@@ -20,11 +20,23 @@ export function extractTokenUrl(text) {
   return match ? match[0] : null
 }
 
-/** Poll until the port accepts connections. */
-export async function waitReady({ port, timeoutMs = 60000, probe = probePort, intervalMs = 500 }) {
+/** An HTTP answer at `/` means the host really serves, not just accepts TCP. */
+export async function httpReady(port, fetchImpl = globalThis.fetch, timeoutMs = 2000) {
+  try {
+    await fetchImpl(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(timeoutMs) })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Poll until the port accepts connections and answers HTTP. */
+export async function waitReady({
+  port, timeoutMs = 60000, probe = probePort, httpProbe = httpReady, intervalMs = 500,
+}) {
   const deadline = Date.now() + timeoutMs
   do {
-    if (await probe(port)) return true
+    if (await probe(port) && await httpProbe(port)) return true
     if (Date.now() >= deadline) return false
     await new Promise((resolve) => setTimeout(resolve, intervalMs))
   } while (Date.now() < deadline)
