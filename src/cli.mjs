@@ -3,7 +3,7 @@ import { LauncherError } from './errors.mjs'
 import { assertInstalled, resolvePaths } from './paths.mjs'
 import { reservePort } from './ports.mjs'
 import { readState, writeState } from './state.mjs'
-import { fetchBusy, startClient, status, stopEverything, switchTo } from './launcher.mjs'
+import { fetchBusy, currentHostPort, startClient, status, stopEverything, switchTo } from './launcher.mjs'
 import { startWeb } from './web.mjs'
 
 const COMMANDS = ['menu', 'client', 'web', 'status', 'stop']
@@ -53,6 +53,34 @@ async function promptChoice() {
   }
 }
 
+async function askYesNo(question) {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+  try {
+    const answer = (await rl.question(`${question} `)).trim().toLowerCase()
+    return answer === 'y' || answer === 'yes'
+  } finally {
+    rl.close()
+  }
+}
+
+/**
+ * Switch, and when the host is busy let an interactive caller confirm and
+ * force. A command line caller never gets that prompt; it must pass --force.
+ */
+export async function switchWithConsent(target, deps, {
+  interactive = false, confirm = null, switchToImpl = switchTo,
+} = {}) {
+  try {
+    return await switchToImpl(target, deps)
+  } catch (error) {
+    const retriable = error?.code === 'busy' || error?.code === 'busy-unconfirmed'
+    if (!interactive || !confirm || !retriable) throw error
+    const proceed = await confirm(`${error.message}\n仍然切换？这可能切断正在运行的回合。[y/N]`)
+    if (!proceed) throw error
+    return await switchToImpl(target, { ...deps, force: true })
+  }
+}
+
 function log(message) {
   process.stdout.write(`${message}\n`)
 }
@@ -85,13 +113,14 @@ export async function run(argv = process.argv.slice(2), overrides = {}) {
   }
 
   const preferredPort = state?.port ?? 3080
+  const busyPort = await currentHostPort({ paths, state })
 
-  await switchTo(resolved, {
+  await switchWithConsent(resolved, {
     paths, force, log,
     port: preferredPort,
     pickPort: () => reservePort(preferredPort),
     prepare: async () => log('预检通过'),
-    busyProbe: async ({ port: busyPort }) => (busyPort ? fetchBusy({ port: busyPort }) : null),
+    busyProbe: async () => (busyPort ? fetchBusy({ port: busyPort }) : null),
     startWeb: async ({ port }) => {
       const result = await startWeb({
         paths, port, addresses: LAN_ADDRESSES, log,
@@ -113,7 +142,7 @@ export async function run(argv = process.argv.slice(2), overrides = {}) {
       })
       return ready
     },
-  })
+  }, { interactive: command === 'menu', confirm: askYesNo })
   return 0
 }
 

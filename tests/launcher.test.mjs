@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { switchTo, fetchBusy, detectCurrent, startClient, stopEverything, stopShell, waitForClient } from '../src/launcher.mjs'
+import { switchTo, fetchBusy, currentHostPort, detectCurrent, startClient, stopEverything, stopShell, waitForClient } from '../src/launcher.mjs'
 
 const clientPaths = {
   desktopProfile: 'C:\\u\\.dsh\\profiles\\desktop',
@@ -170,6 +170,23 @@ test('waitForClient waits for a listening port, not just the process', async () 
   })
   assert.equal(result.port, 27180)
   assert.ok(polls >= 3)
+})
+
+test('currentHostPort prefers the recorded port and otherwise asks the host pid', async () => {
+  assert.equal(await currentHostPort({ paths: clientPaths, state: { port: 3080 } }), 3080)
+  assert.equal(
+    await currentHostPort({
+      paths: clientPaths,
+      state: null,
+      list: async () => [desktopHost],
+      ports: async () => [27180],
+    }),
+    27180,
+  )
+  assert.equal(
+    await currentHostPort({ paths: clientPaths, state: null, list: async () => [], ports: async () => [] }),
+    null,
+  )
 })
 
 test('detectCurrent reports the shell that owns the profile', async () => {

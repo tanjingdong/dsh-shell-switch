@@ -156,6 +156,25 @@ export async function stopEverything({ paths, state, list = listProcesses, kill 
   return { current, killed }
 }
 
+/**
+ * The port the running shell listens on. The desktop client does not always
+ * have a recorded port, so ask its host process for one.
+ */
+export async function currentHostPort({ paths, state, list = listProcesses, ports = listListeningPorts }) {
+  if (state?.port) return state.port
+  try {
+    const processes = await list()
+    const host = processes.find((process) => (
+      isDesktopHost(process, paths) || isWebHost(process, paths)
+    ))
+    if (!host) return null
+    const open = await ports(host.pid).catch(() => [])
+    return open[0] ?? null
+  } catch {
+    return null
+  }
+}
+
 /** Report what is running right now. */
 export async function status({ paths, list = listProcesses, state }) {
   const current = await detectCurrent({ paths, list })
