@@ -55,6 +55,23 @@ export function isRelayProcess(process) {
   return normalize(process.commandLine).includes(normalize(relayScriptFile))
 }
 
+/**
+ * Processes Windows protects and whose death takes the session with it.
+ * A stale parent pid can make one look like a child of the shell we stop, and
+ * killing csrss or winlogon is not a recovery path.
+ */
+const CRITICAL_PROCESS_NAMES = new Set([
+  'system', 'registry', 'memcompression', 'secure system',
+  'smss.exe', 'csrss.exe', 'wininit.exe', 'winlogon.exe', 'services.exe', 'lsass.exe',
+  'lsaiso.exe', 'logonui.exe', 'dwm.exe', 'svchost.exe', 'explorer.exe', 'fontdrvhost.exe',
+  'sihost.exe', 'taskhostw.exe', 'runtimebroker.exe', 'shellexperiencehost.exe',
+  'searchhost.exe', 'startmenuexperiencehost.exe', 'ctfmon.exe', 'smartscreen.exe',
+])
+
+export function isCriticalProcess(process) {
+  return CRITICAL_PROCESS_NAMES.has(String(process?.name ?? '').toLowerCase())
+}
+
 const LISTEN_QUERY = (pid) => '[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false); '
   + `Get-NetTCPConnection -State Listen -OwningProcess ${Math.trunc(Number(pid))} -ErrorAction SilentlyContinue `
   + '| Select-Object -ExpandProperty LocalPort'

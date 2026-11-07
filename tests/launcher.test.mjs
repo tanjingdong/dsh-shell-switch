@@ -203,6 +203,59 @@ test('switchTo ends the relay of the shell it is leaving', async () => {
   assert.deepEqual(killed, [20, 30])
 })
 
+test('stopShell never targets critical system processes that look like children', async () => {
+  const killed = []
+  const processes = [
+    { pid: 10, parentPid: 0, name: 'DeepSeek Harness.exe', commandLine: '"C:\\l\\DeepSeek Harness.exe"' },
+    { pid: 20, parentPid: 10, name: 'DeepSeek Harness.exe', commandLine: 'x\\dsh-desktop-host\\lib\\index.js C:\\u\\.dsh\\profiles\\desktop' },
+    { pid: 22, parentPid: 20, name: 'winlogon.exe', commandLine: 'winlogon.exe' },
+    { pid: 23, parentPid: 20, name: 'csrss.exe', commandLine: 'csrss.exe' },
+    { pid: 24, parentPid: 20, name: 'dwm.exe', commandLine: 'dwm.exe' },
+  ]
+  await stopShell({
+    current: 'client',
+    paths: clientPaths,
+    list: async () => processes,
+    kill: async (pid) => { killed.push(pid) },
+    protect: [999],
+  })
+  assert.deepEqual(killed, [20, 10])
+})
+
+test('an unkillable helper process does not abort stopping the shell', async () => {
+  const killed = []
+  const processes = [
+    { pid: 10, parentPid: 0, name: 'DeepSeek Harness.exe', commandLine: '"C:\\l\\DeepSeek Harness.exe"' },
+    { pid: 20, parentPid: 10, name: 'DeepSeek Harness.exe', commandLine: 'x\\dsh-desktop-host\\lib\\index.js C:\\u\\.dsh\\profiles\\desktop' },
+    { pid: 25, parentPid: 20, name: 'conhost.exe', commandLine: 'conhost.exe' },
+  ]
+  const ids = await stopShell({
+    current: 'client',
+    paths: clientPaths,
+    list: async () => processes,
+    kill: async (pid) => {
+      if (pid === 25) throw new Error('无法结束进程 25')
+      killed.push(pid)
+    },
+    protect: [999],
+  })
+  assert.deepEqual(ids, [20, 10])
+  assert.deepEqual(killed, [20, 10])
+})
+
+test('stopShell still fails loudly when the shell itself cannot be ended', async () => {
+  await assert.rejects(
+    stopShell({
+      current: 'web',
+      paths: clientPaths,
+      list: async () => [{ pid: 20, parentPid: 0, name: 'node.exe', commandLine: 'x\\cli.js web --port 3080' }],
+      kill: async () => { throw new Error('access denied') },
+      protect: [999],
+    }),
+    /access denied/,
+  )
+})
+
 test('stopShell never kills its own process while ending the shell tree', async () => {
   const killed = []
   const processes = [

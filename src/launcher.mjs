@@ -1,8 +1,8 @@
 import { spawn } from 'node:child_process'
 import { LauncherError } from './errors.mjs'
 import {
-  collectDescendants, isDesktopHost, isElectronShell, isRelayProcess, isWebHost, killTree,
-  listListeningPorts, listProcesses,
+  collectDescendants, isCriticalProcess, isDesktopHost, isElectronShell, isRelayProcess,
+  isWebHost, killTree, listListeningPorts, listProcesses,
 } from './procs.mjs'
 
 function sleep(ms) {
@@ -76,11 +76,22 @@ export async function stopShell({
 
   for (const target of targets) {
     const pid = Number(target.pid)
-    // Support processes first, so a dying parent cannot orphan them.
+    // Support processes first, so a dying parent cannot orphan them. These are
+    // best effort: a refusal (often a system process mis-attributed by a stale
+    // parent pid) must not abort the switch.
     const children = collectDescendants([pid], processes, { protect })
       .filter((child) => child !== pid && !targetIds.has(child))
     for (const child of children.reverse()) {
-      await end(child, { force: true, timeoutMs: 0, tree: false })
+      if (blocked.has(child) || done.has(child)) continue
+      done.add(child)
+      const record = processes.find((process) => Number(process.pid) === child)
+      if (record && isCriticalProcess(record)) continue
+      try {
+        await kill(child, { force: true, timeoutMs: 0, tree: false })
+        killed.push(child)
+      } catch {
+        /* leave it: the shell below still has to die */
+      }
     }
     await end(pid, { force: true, timeoutMs, tree: false })
   }
