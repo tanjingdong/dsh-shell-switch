@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
-import { createLauncherSpawner, createMount, mountRoutes, readActivity, resolveNodeBinary } from '../plugin/index.mjs'
+import { createLauncherSpawner, createMount, mountRoutes, readActivity, resolveNodeBinary, shortcutSpec } from '../plugin/index.mjs'
 
 test('readActivity counts running agents, jobs and waiting approvals', () => {
   const registry = {
@@ -58,6 +58,12 @@ test('the inject callback returns nothing so its routes survive', () => {
   // Cordis treats a callback's return value as a disposer; returning anything
   // here removes every route right after it is registered.
   assert.equal(createMount({ handle: () => ({}) })(host), undefined)
+})
+
+test('the desktop shortcut points at the menu wrapper that waits for a key', () => {
+  const spec = shortcutSpec('F:\\repo')
+  assert.equal(spec.target, 'F:\\repo\\dsh-switch-menu.cmd')
+  assert.equal(spec.dir, 'F:\\repo')
 })
 
 test('mountRoutes reports when the host has no web server', () => {

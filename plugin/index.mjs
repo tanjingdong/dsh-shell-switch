@@ -15,6 +15,14 @@ export const inject = ['webServer']
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
 
+/**
+ * The desktop shortcut runs the menu wrapper, not the bare launcher: the
+ * wrapper waits for a key so a window opened by a double click stays readable.
+ */
+export function shortcutSpec(root = REPO_ROOT) {
+  return { target: path.join(root, 'dsh-switch-menu.cmd'), dir: root }
+}
+
 const LAUNCHER_CLI = fileURLToPath(new URL('../src/cli.mjs', import.meta.url))
 const LAUNCHER_CWD = path.dirname(path.dirname(LAUNCHER_CLI))
 
@@ -144,10 +152,7 @@ export function apply(ctx) {
         return null
       }
     },
-    createShortcut: () => createDesktopShortcut({
-      target: path.join(REPO_ROOT, 'dsh-switch.cmd'),
-      dir: REPO_ROOT,
-    }),
+    createShortcut: () => createDesktopShortcut(shortcutSpec()),
     sendTest: async () => {
       const config = await readReportConfig(reportConfigFile(paths))
       if (!config.report.webhook) return { ok: false, error: '网络通道未开启' }
