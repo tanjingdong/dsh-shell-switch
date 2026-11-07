@@ -1,6 +1,6 @@
 {
   "name": "dsh-shell-switch",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Switch the DeepSeek Harness between its desktop client and the browser Web GUI over one shared profile, and report each switch where you want it.",
   "private": false,
   "type": "module",
@@ -18,7 +18,8 @@
     "src",
     "setup",
     "dsh-switch.cmd",
-    "dsh-switch-menu.cmd"
+    "dsh-switch-menu.cmd",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "test": "node --test \"tests/*.test.mjs\""
@@ -38,7 +39,16 @@
   "engines": {
     "node": ">=20"
   },
-  "license": "MIT",
+  "author": "谭靖东",
+  "license": "Unlicense",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tanjingdong/dsh-shell-switch.git"
+  },
+  "homepage": "https://github.com/tanjingdong/dsh-shell-switch#readme",
+  "bugs": {
+    "url": "https://github.com/tanjingdong/dsh-shell-switch/issues"
+  },
   "publishConfig": {
     "access": "public"
   },

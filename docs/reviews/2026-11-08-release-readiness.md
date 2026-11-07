@@ -1,7 +1,8 @@
 # 发布就绪评估（2026-11-08）
 
-> **阶段 1 进展（同日）**：单包重构完成（仓库根即 bundle，`plugin/` 已并入根）、元数据 / `LICENSE` / CI / README 重写已落地。
-> 仍缺：GitHub 仓库地址与署名（`repository`/`homepage`/`bugs` 字段待填）、真实推送。
+> **阶段 1 进展（同日）**：单包重构完成（仓库根即 bundle，`plugin/` 已并入根）、元数据 / `LICENSE` / CI / README 重写 / CHANGELOG 已落地。
+> 仓库已确定为 `https://github.com/tanjingdong/dsh-shell-switch`，许可证 The Unlicense，版本 1.0.0。
+> 仍缺：本地配置 `origin` 后的首次推送（需要仓库凭据），以及阶段 2 的 `setup`/`doctor`/兼容检查。
 > 迁移注意：旧 profile 里的 `link:` 指向已删除的 `plugin/`，升级后必须重跑 `node setup\install.mjs` 再重启外壳。
 
 结论：功能面已经闭环（157 项测试全绿，真机验收完成），但**发布面还差四类东西**：打包形态、元数据与许可、兼容性护栏、面向陌生人的文档。前三类是阻断项，不解决就发不出去或一发就坏。
