@@ -1,2 +1,5 @@
 .superpowers/
 node_modules/
+_*
+debug.mjs
+*.tmp

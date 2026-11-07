@@ -1,0 +1,67 @@
+{
+  "name": "dsh-shell-switch",
+  "version": "1.0.0",
+  "description": "Switch the DeepSeek Harness between its desktop client and the browser Web GUI over one shared profile, and report each switch where you want it.",
+  "private": false,
+  "type": "module",
+  "main": "./index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.mjs",
+    "routes.mjs",
+    "client.js",
+    "cordis.patch.yml",
+    "src",
+    "setup",
+    "dsh-switch.cmd",
+    "dsh-switch-menu.cmd",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "shell",
+    "desktop",
+    "web",
+    "windows"
+  ],
+  "os": [
+    "win32"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "author": "谭靖东",
+  "license": "Unlicense",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tanjingdong/dsh-shell-switch.git"
+  },
+  "homepage": "https://github.com/tanjingdong/dsh-shell-switch#readme",
+  "bugs": {
+    "url": "https://github.com/tanjingdong/dsh-shell-switch/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-ui-renderer"
+      ]
+    }
+  }
+}

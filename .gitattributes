@@ -1,0 +1,9 @@
+# Batch files must keep CRLF: cmd.exe mis-parses a LF-only script.
+*.cmd text eol=crlf
+
+# Everything else: let git normalise to LF in the repository.
+* text=auto
+
+# Binary-ish fixtures, if any are added later.
+*.png binary
+*.ico binary
