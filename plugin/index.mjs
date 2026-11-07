@@ -4,6 +4,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createLogger } from '../src/log.mjs'
 import { resolvePaths } from '../src/paths.mjs'
+import { buildWebhookBody, sendWebhook } from '../src/report.mjs'
+import { readReportConfig, reportConfigFile } from '../src/report-config.mjs'
 import { createHandoffRoutes } from './routes.mjs'
 
 export const name = 'dsh-shell-switch'
@@ -80,7 +82,8 @@ function send(res, result) {
 }
 
 export function apply(ctx) {
-  const logger = createLogger({ paths: resolvePaths() })
+  const paths = resolvePaths()
+  const logger = createLogger({ paths })
   const spawnLauncher = createLauncherSpawner({
     nodeBinary: resolveNodeBinary(),
     log: logger.log,
@@ -88,6 +91,18 @@ export function apply(ctx) {
   const routes = createHandoffRoutes({
     spawnLauncher,
     readActivity: () => readActivity(ctx),
+    sendTest: async () => {
+      const config = await readReportConfig(reportConfigFile(paths))
+      if (!config.report.webhook) return { ok: false, error: '网络通道未开启' }
+      const body = buildWebhookBody(config, {
+        url: 'http://127.0.0.1:3080/?token=test',
+        token: 'test',
+        port: 3080,
+        target: 'web',
+        time: new Date().toISOString(),
+      })
+      return await sendWebhook({ url: config.webhook.url, body })
+    },
   })
 
   const mount = (host) => {
@@ -101,7 +116,9 @@ export function apply(ctx) {
       })
       req.on('end', () => {
         const remote = { remoteAddress: req.socket?.remoteAddress }
-        send(res, routes.handle(req.method, req.url, req.headers, remote, body))
+        Promise.resolve(routes.handle(req.method, req.url, req.headers, remote, body))
+          .then((result) => send(res, result))
+          .catch(() => send(res, { status: 500, body: JSON.stringify({ error: 'handler-error' }) }))
       })
       req.on('error', () => send(res, { status: 500, body: JSON.stringify({ error: 'request-error' }) }))
     }

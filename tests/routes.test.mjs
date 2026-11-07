@@ -37,6 +37,52 @@ test('state treats jobs, a waiting inbox and approvals as busy', () => {
   assert.equal(busy({ agents: 0, jobs: 0, inbox: false, approvals: 0 }), false)
 })
 
+test('the config route reads, saves a valid config and refuses an invalid one', async () => {
+  let saved = null
+  const routes = createHandoffRoutes({
+    now: () => 1, random: () => 'n', spawnLauncher: () => 1, readActivity: () => ({ agents: 0, jobs: 0 }),
+    readConfig: async () => ({ report: { clipboard: true, dialog: true, webhook: false }, webhook: { url: '', template: '{"text":"{target}"}' } }),
+    writeConfig: async (config) => { saved = config; return config },
+  })
+  const read = await routes.handle('GET', '/dsh-switch/report-config', headers, loop)
+  assert.equal(read.status, 200)
+  assert.match(read.body, /clipboard/)
+
+  const good = await routes.handle('POST', '/dsh-switch/report-config', headers, loop, JSON.stringify({ report: { clipboard: false } }))
+  assert.equal(good.status, 200)
+  assert.equal(saved.report.clipboard, false)
+
+  const bad = await routes.handle('POST', '/dsh-switch/report-config', headers, loop, JSON.stringify({ webhook: { url: 'ftp://x', template: '{oops' } }))
+  assert.equal(bad.status, 400)
+  assert.match(bad.body, /http/)
+})
+
+test('the config routes refuse a non-loopback caller', async () => {
+  const routes = createHandoffRoutes({ now: () => 1, random: () => 'n', spawnLauncher: () => 1, readConfig: async () => ({}), writeConfig: async () => ({}) })
+  const res = await routes.handle('GET', '/dsh-switch/report-config', headers, { remoteAddress: '10.0.0.2' })
+  assert.equal(res.status, 403)
+})
+
+test('the test route reports the webhook status', async () => {
+  const routes = createHandoffRoutes({
+    now: () => 1, random: () => 'n', spawnLauncher: () => 1,
+    sendTest: async () => ({ ok: true, status: 204 }),
+  })
+  const res = await routes.handle('POST', '/dsh-switch/report-test', headers, loop, '{}')
+  assert.equal(res.status, 200)
+  assert.match(res.body, /204/)
+})
+
+test('a failing test send is reported as 502', async () => {
+  const routes = createHandoffRoutes({
+    now: () => 1, random: () => 'n', spawnLauncher: () => 1,
+    sendTest: async () => ({ ok: false, error: 'ECONNREFUSED' }),
+  })
+  const res = await routes.handle('POST', '/dsh-switch/report-test', headers, loop, '{}')
+  assert.equal(res.status, 502)
+  assert.match(res.body, /ECONNREFUSED/)
+})
+
 test('a failing launcher spawn becomes 500 instead of throwing', () => {
   const routes = createHandoffRoutes({ now: () => 1000, random: () => 'n1', spawnLauncher: () => { throw new Error('nope') }, readActivity: () => ({ agents: 0, jobs: 0 }) })
   routes.handle('GET', '/dsh-switch/state', headers, loop)
