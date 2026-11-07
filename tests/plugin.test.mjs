@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
-import { createLauncherSpawner, mountRoutes, readActivity, resolveNodeBinary } from '../plugin/index.mjs'
+import { createLauncherSpawner, createMount, mountRoutes, readActivity, resolveNodeBinary } from '../plugin/index.mjs'
 
 test('readActivity counts running agents, jobs and waiting approvals', () => {
   const registry = {
@@ -46,6 +46,16 @@ test('every route the client calls is mounted on the host web server', () => {
   ]) {
     assert.ok(registered.includes(path), `missing route ${path}: ${JSON.stringify(registered)}`)
   }
+})
+
+test('the inject callback returns nothing so its routes survive', () => {
+  const host = {
+    webServer: { register: () => () => {} },
+    effect: (fn) => { fn(); return () => {} },
+  }
+  // Cordis treats a callback's return value as a disposer; returning anything
+  // here removes every route right after it is registered.
+  assert.equal(createMount({ handle: () => ({}) })(host), undefined)
 })
 
 test('mountRoutes reports when the host has no web server', () => {

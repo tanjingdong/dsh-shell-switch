@@ -113,6 +113,13 @@ export function mountRoutes(host, routes) {
   return true
 }
 
+/** Mount a route table on whichever host provides `webServer`. */
+export function createMount(routes) {
+  return (host) => {
+    mountRoutes(host, routes)
+  }
+}
+
 export function apply(ctx) {
   const paths = resolvePaths()
   const logger = createLogger({ paths })
@@ -137,7 +144,9 @@ export function apply(ctx) {
     },
   })
 
-  const mount = (host) => mountRoutes(host, routes)
+  // The inject callback must return nothing: a returned value is taken as a
+  // disposer, and every route registered here would be removed right after.
+  const mount = createMount(routes)
 
   if (typeof ctx.inject === 'function') {
     try {
