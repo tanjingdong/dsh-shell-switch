@@ -39,6 +39,7 @@ window.__ModuleLoader__.load({
         loopbackOnly: false,
       },
     };
+    const SHELL_LABEL = { client: "桌面客户端", web: "浏览器 Web" };
     // Everything on the settings page inherits the host colors: dsh ships a
     // light and a dark theme, so a fixed color is invisible in the other one.
     const pageStyle = {
@@ -211,6 +212,11 @@ window.__ModuleLoader__.load({
         setPhase("checking");
         try {
           const state = await readState();
+          if (state.current === target) {
+            setNote(`当前已经是${SHELL_LABEL[target]}，不需要切换。`);
+            setPhase("noop");
+            return;
+          }
           setPending({ target, nonce: state.nonce });
           setNote(state.known === false
             ? "无法确认是否空闲；若正在跑回合，切换会切断它。"

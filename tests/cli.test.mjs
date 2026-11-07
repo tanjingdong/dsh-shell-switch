@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseArgs, preferredPortFor, renderMenu, statusLine, stopNotice, switchWithConsent } from '../src/cli.mjs'
+import { noopNotice, parseArgs, preferredPortFor, renderMenu, statusLine, stopNotice, switchWithConsent } from '../src/cli.mjs'
 
 test('parseArgs defaults to menu and accepts --force and --now', () => {
   assert.deepEqual(parseArgs([]), { command: 'menu', force: false, now: false })
@@ -23,6 +23,12 @@ test('renderMenu lists the four choices', () => {
   assert.match(menu, /2\).*Web/)
   assert.match(menu, /3\).*状态/)
   assert.match(menu, /4\).*停止/)
+})
+
+test('a switch to the shell that is already running says so', () => {
+  assert.equal(noopNotice(null), null)
+  assert.match(noopNotice('client'), /桌面客户端/)
+  assert.match(noopNotice('web'), /浏览器 Web/)
 })
 
 test('the web shell always prefers the stable 3080 port', () => {

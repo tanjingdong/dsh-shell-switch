@@ -37,6 +37,26 @@ test('state treats jobs, a waiting inbox and approvals as busy', () => {
   assert.equal(busy({ agents: 0, jobs: 0, inbox: false, approvals: 0 }), false)
 })
 
+test('state names the running shell so the panel can say "already there"', async () => {
+  const routes = createHandoffRoutes({
+    now: () => 1, random: () => 'n', spawnLauncher: () => 1,
+    readActivity: () => ({ agents: 0, jobs: 0 }),
+    readCurrent: async () => 'client',
+  })
+  const res = await routes.handle('GET', '/dsh-switch/state', headers, loop)
+  assert.equal(res.status, 200)
+  assert.equal(JSON.parse(res.body).current, 'client')
+})
+
+test('state omits the shell when the host cannot detect it', async () => {
+  const routes = createHandoffRoutes({
+    now: () => 1, random: () => 'n', spawnLauncher: () => 1,
+    readActivity: () => ({ agents: 0, jobs: 0 }),
+  })
+  const res = routes.handle('GET', '/dsh-switch/state', headers, loop)
+  assert.equal(JSON.parse(res.body).current, undefined)
+})
+
 test('the config route reads, saves a valid config and refuses an invalid one', async () => {
   let saved = null
   const routes = createHandoffRoutes({

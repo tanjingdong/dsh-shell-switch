@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createLogger } from '../src/log.mjs'
+import { detectCurrent } from '../src/launcher.mjs'
 import { resolvePaths } from '../src/paths.mjs'
 import { buildWebhookBody, sendWebhook } from '../src/report.mjs'
 import { readReportConfig, reportConfigFile } from '../src/report-config.mjs'
@@ -130,6 +131,14 @@ export function apply(ctx) {
   const routes = createHandoffRoutes({
     spawnLauncher,
     readActivity: () => readActivity(ctx),
+    // Lets the panel say "already there" instead of flashing nothing.
+    readCurrent: async () => {
+      try {
+        return await detectCurrent({ paths })
+      } catch {
+        return null
+      }
+    },
     sendTest: async () => {
       const config = await readReportConfig(reportConfigFile(paths))
       if (!config.report.webhook) return { ok: false, error: '网络通道未开启' }

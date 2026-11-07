@@ -30,6 +30,7 @@ export function createHandoffRoutes({
   now = () => Date.now(),
   random = () => randomUUID(),
   readActivity = () => null,
+  readCurrent = null,
   readConfig = null,
   writeConfig = null,
   sendTest = null,
@@ -61,6 +62,19 @@ export function createHandoffRoutes({
 
   const respond = (fn) => fn().catch((error) => json(500, { errors: [String(error?.message ?? error)] }))
 
+  const statePayload = () => {
+    const activity = readActivity()
+    const known = activity !== null && typeof activity === 'object'
+    const agents = known ? Number(activity.agents ?? 0) : 0
+    const jobs = known ? Number(activity.jobs ?? 0) : 0
+    const inbox = known && activity.inbox === true
+    const approvals = known ? Number(activity.approvals ?? 0) : 0
+    return {
+      busy: agents > 0 || jobs > 0 || inbox || approvals > 0,
+      known, agents, jobs, inbox, approvals, nonce,
+    }
+  }
+
   return {
     handle(method, url, headers = {}, remote = {}, body) {
       try {
@@ -71,16 +85,10 @@ export function createHandoffRoutes({
         if (method === 'GET' && url === '/dsh-switch/state') {
           nonce = random()
           expiresAt = now() + NONCE_TTL_MS
-          const activity = readActivity()
-          const known = activity !== null && typeof activity === 'object'
-          const agents = known ? Number(activity.agents ?? 0) : 0
-          const jobs = known ? Number(activity.jobs ?? 0) : 0
-          const inbox = known && activity.inbox === true
-          const approvals = known ? Number(activity.approvals ?? 0) : 0
-          return json(200, {
-            busy: agents > 0 || jobs > 0 || inbox || approvals > 0,
-            known, agents, jobs, inbox, approvals, nonce,
-          })
+          const payload = statePayload()
+          // Only a host that can name the running shell pays for the probe.
+          if (typeof readCurrent !== 'function') return json(200, payload)
+          return respond(async () => json(200, { ...payload, current: await readCurrent() }))
         }
 
         if (method === 'GET' && url === '/dsh-switch/report-config') {

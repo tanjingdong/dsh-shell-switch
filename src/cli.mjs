@@ -36,6 +36,12 @@ export function stopNotice(current, now = false) {
   return '正在关闭桌面客户端：未保存的内容可能丢失；要立即结束请加 --now'
 }
 
+/** Say so instead of finishing silently when the target is already running. */
+export function noopNotice(current) {
+  if (!current) return null
+  return `当前已经是${current === 'client' ? '桌面客户端' : '浏览器 Web'}，无需切换`
+}
+
 /** One status line, including the token url when the state recorded one. */
 export function statusLine(info = {}) {
   const current = info.current ?? '没有外壳在运行'
@@ -221,6 +227,9 @@ export async function run(argv = process.argv.slice(2), overrides = {}) {
       info: { target: resolved, port: switched.port ?? preferredPort, url: startedUrl },
       deps: { log: write, config: runtimeConfig },
     })
+  } else {
+    const notice = noopNotice(switched?.current)
+    if (notice) write(notice)
   }
   return 0
 }
