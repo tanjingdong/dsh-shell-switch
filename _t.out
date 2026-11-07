@@ -1,0 +1,2 @@
+✔ probePort reports a listener as occupied and a closed port as free (15.7165ms)
+✖ findFreePort skips an occupied port and rejects an exhausted range (3.0127ms)
