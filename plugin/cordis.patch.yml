@@ -1,0 +1,6 @@
+# dsh-shell-switch: one host half (two loopback routes) plus one client half
+# (sidebar button). Mounted as a single row; the client entry is declared by
+# package.json's dsh.client.
+- insert:
+    - id: dsh-shell-switch
+      name: 'dsh-shell-switch'
