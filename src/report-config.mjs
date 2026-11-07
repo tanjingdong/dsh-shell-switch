@@ -5,7 +5,11 @@ export const DEFAULT_REPORT_CONFIG = {
   report: { clipboard: true, dialog: true, webhook: false },
   webhook: { url: '', template: '{"text":"DSH 外壳已切换到 {target}：{url}"}' },
   network: {
-    addresses: ['192.168.0.106', '10.147.20.214', '100.100.0.3'],
+    // No machine-specific default: which interfaces exist is per-machine and
+    // changes over time, so a shipped default cannot be right anywhere.
+    // An empty list publishes nothing; the settings page offers the detected
+    // interfaces to pick from.
+    addresses: [],
     loopbackOnly: false,
   },
 }
@@ -52,11 +56,11 @@ export function normalizeReportConfig(raw) {
         : DEFAULT_REPORT_CONFIG.webhook.template,
     },
     network: {
-      // An explicit empty list means "publish nowhere"; only a missing list
-      // falls back to the defaults.
+      // An explicit empty list means "publish nowhere"; an absent list has no
+      // machine-independent default to fall back to either.
       addresses: Array.isArray(network.addresses)
         ? network.addresses.map((address) => String(address ?? '').trim()).filter(Boolean)
-        : DEFAULT_REPORT_CONFIG.network.addresses.slice(),
+        : [],
       loopbackOnly: network.loopbackOnly === true,
     },
   }

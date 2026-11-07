@@ -24,7 +24,7 @@ test('normalizeReportConfig keeps known keys and ignores junk', () => {
   assert.deepEqual(config, {
     report: { clipboard: false, dialog: true, webhook: true },
     webhook: { url: 'http://x', template: '{"a":1}' },
-    network: { addresses: ['192.168.0.106', '10.147.20.214', '100.100.0.3'], loopbackOnly: false },
+    network: { addresses: [], loopbackOnly: false },
   })
 })
 
@@ -45,9 +45,10 @@ test('an unquoted number placeholder is still valid JSON after rendering', () =>
   assert.deepEqual(validateReportConfig(config), [])
 })
 
-test('network defaults to the three LAN addresses with the relay enabled', () => {
-  assert.deepEqual(DEFAULT_REPORT_CONFIG.network.addresses, ['192.168.0.106', '10.147.20.214', '100.100.0.3'])
+test('network defaults publish nothing, because interfaces are per-machine', () => {
+  assert.deepEqual(DEFAULT_REPORT_CONFIG.network.addresses, [])
   assert.equal(DEFAULT_REPORT_CONFIG.network.loopbackOnly, false)
+  assert.deepEqual(normalizeReportConfig({}).network.addresses, [])
 })
 
 test('normalizeReportConfig trims and de-duplicates nothing, just cleans blanks', () => {

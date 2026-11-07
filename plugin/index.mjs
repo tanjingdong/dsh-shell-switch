@@ -87,6 +87,7 @@ export const ROUTE_PATHS = [
   '/dsh-switch/state',
   '/dsh-switch/handoff',
   '/dsh-switch/report-config',
+  '/dsh-switch/interfaces',
   '/dsh-switch/report-test',
 ]
 

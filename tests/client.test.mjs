@@ -154,14 +154,19 @@ test('the page buttons inherit the host text color', () => {
   }
 })
 
-test('the page explains the network settings', () => {
+test('the page explains the network settings and offers the local interfaces', () => {
   const bundle = loadBundle({
-    fetch: async () => ({ ok: true, json: async () => ({ report: {}, webhook: {}, network: {} }) }),
+    fetch: async (url) => ({
+      ok: true,
+      json: async () => (String(url).includes('interfaces')
+        ? { interfaces: [{ name: '以太网', address: '192.168.0.106' }] }
+        : { report: {}, webhook: {}, network: {} }),
+    }),
   })
   const row = mountBundle(bundle, { firstState: false })
     .find((entry) => entry.name === 'plugins.row.config')
   const words = texts(expand(row.render({ view: 'page' })))
-  for (const expected of ['监听网卡', '只绑定回环']) {
+  for (const expected of ['本机网卡', '只绑定回环', '手动添加地址']) {
     assert.ok(words.some((word) => word.includes(expected)), `missing ${expected}: ${JSON.stringify(words)}`)
   }
   assert.ok(words.some((word) => word.includes('127.0.0.1')), 'loopback explanation missing')

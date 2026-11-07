@@ -67,6 +67,16 @@ test('state omits the shell when the host cannot detect it', async () => {
   assert.equal(JSON.parse(res.body).current, undefined)
 })
 
+test('the interfaces route reports the detected local IPv4 interfaces', async () => {
+  const routes = createHandoffRoutes({
+    now: () => 1, random: () => 'n', spawnLauncher: () => 1,
+    readInterfaces: async () => [{ name: '以太网', address: '192.168.0.106' }],
+  })
+  const res = await routes.handle('GET', '/dsh-switch/interfaces', headers, loop)
+  assert.equal(res.status, 200)
+  assert.deepEqual(JSON.parse(res.body).interfaces, [{ name: '以太网', address: '192.168.0.106' }])
+})
+
 test('the config route reads, saves a valid config and refuses an invalid one', async () => {
   let saved = null
   const routes = createHandoffRoutes({

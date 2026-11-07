@@ -35,7 +35,7 @@ window.__ModuleLoader__.load({
       report: { clipboard: true, dialog: true, webhook: false },
       webhook: { url: "", template: '{"text":"DSH 外壳已切换到 {target}：{url}"}' },
       network: {
-        addresses: ["192.168.0.106", "10.147.20.214", "100.100.0.3"],
+        addresses: [],
         loopbackOnly: false,
       },
     };
@@ -66,6 +66,8 @@ window.__ModuleLoader__.load({
 
     let configCache = null;
     let configLoading = false;
+    let interfacesCache = null;
+    let interfacesLoading = false;
 
     async function postJson(url, payload) {
       const response = await fetch(url, {
@@ -84,6 +86,16 @@ window.__ModuleLoader__.load({
       // Nothing may be saved before the real file has been read: the form
       // starts from the defaults, and saving those would overwrite the file.
       const [loaded, setLoaded] = useState(configCache !== null);
+      const [interfaces, setInterfaces] = useState(interfacesCache);
+
+      if (interfacesCache === null && !interfacesLoading) {
+        interfacesLoading = true;
+        fetch("/dsh-switch/interfaces")
+          .then((response) => (response.ok ? response.json() : Promise.reject(new Error(`网卡读取失败（${response.status}）`))))
+          .then((body) => { interfacesCache = body.interfaces || []; setInterfaces(interfacesCache); })
+          .catch(() => { interfacesCache = []; setInterfaces([]); })
+          .finally(() => { interfacesLoading = false; });
+      }
 
       if (!configCache && !configLoading) {
         configLoading = true;
@@ -106,6 +118,17 @@ window.__ModuleLoader__.load({
         ...current, network: { ...(current.network || DEFAULT_CONFIG.network), [key]: value },
       }));
       const network = model.network || DEFAULT_CONFIG.network;
+      const toggleAddress = (address, checked) => setNetwork(
+        "addresses",
+        checked
+          ? [...new Set([...(network.addresses || []), address])]
+          : (network.addresses || []).filter((item) => item !== address),
+      );
+      const refreshInterfaces = () => {
+        interfacesCache = null;
+        interfacesLoading = false;
+        setInterfaces(null);
+      };
 
       const save = async () => {
         setBusy(true);
@@ -173,18 +196,32 @@ window.__ModuleLoader__.load({
 
         h("div", { style: sectionStyle },
           h("p", { style: sectionTitleStyle }, "网络发布"),
-          h("label", { style: fieldStyle }, "监听网卡",
+          h("p", { style: helpStyle }, "未选择任何网卡时不会启动 relay：只有本机 127.0.0.1 能访问。"),
+          h("p", { style: sectionTitleStyle }, "本机网卡"),
+          (interfaces || []).map((item) => h("label", { style: checkStyle, key: item.address },
+            h("input", {
+              type: "checkbox",
+              checked: (network.addresses || []).includes(item.address),
+              disabled: network.loopbackOnly === true,
+              onChange: (e) => toggleAddress(item.address, e.target.checked),
+            }),
+            `${item.name} · ${item.address}`)),
+          interfaces !== null && (interfaces || []).length === 0
+            && h("p", { style: helpStyle }, "没有检测到可用的 IPv4 网卡。"),
+          h("div", { style: actionsStyle },
+            h("button", { style: pageButton, disabled: network.loopbackOnly === true, onClick: refreshInterfaces }, "重新检测网卡")),
+          h("label", { style: fieldStyle }, "手动添加地址（每行一个）",
             h("textarea", {
-              style: { ...controlStyle, minHeight: 64, opacity: network.loopbackOnly ? 0.5 : 1 },
+              style: { ...controlStyle, minHeight: 56, opacity: network.loopbackOnly ? 0.5 : 1 },
               value: (network.addresses || []).join("\n"),
               disabled: network.loopbackOnly,
               onChange: (e) => setNetwork("addresses", e.target.value.split(/[\s,]+/).filter(Boolean)),
             })),
+          h("p", { style: helpStyle }, "手动填写用于此刻没连上的网卡（例如 VPN）；连不上时只损失那一个入口。"),
           h("label", { style: checkStyle },
             h("input", { type: "checkbox", checked: network.loopbackOnly === true, onChange: (e) => setNetwork("loopbackOnly", e.target.checked) }),
             "只绑定回环（不启动 relay）"),
-          h("p", { style: helpStyle }, "relay 会把网页端口发布到上面列出的每个本机网卡地址（每行一个，或逗号分隔）。地址写错只丢那一个入口，不影响 127.0.0.1。"),
-          h("p", { style: helpStyle }, "勾上「只绑定回环」后完全不发布到局域网，只有本机 127.0.0.1 能访问。DSH 不允许监听 0.0.0.0，这里也不接受。")),
+          h("p", { style: helpStyle }, "勾上后完全不发布到局域网。DSH 不允许监听 0.0.0.0，这里也不接受。")),
 
         h("div", { style: actionsStyle },
           h("button", { style: pageButton, disabled: busy || !loaded, onClick: save }, "保存"),

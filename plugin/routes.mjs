@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import os from 'node:os'
 import { resolvePaths } from '../src/paths.mjs'
 import {
   normalizeReportConfig, readReportConfig, reportConfigFile, validateReportConfig, writeReportConfig,
@@ -7,6 +8,18 @@ import {
 const NONCE_TTL_MS = 5 * 60 * 1000
 
 const configFile = () => reportConfigFile(resolvePaths())
+
+/** IPv4 interfaces of this machine, so the page never needs a shipped default. */
+function localInterfaces() {
+  const found = []
+  for (const [name, entries] of Object.entries(os.networkInterfaces())) {
+    for (const entry of entries ?? []) {
+      if (entry.family !== 'IPv4' || entry.internal) continue
+      found.push({ name, address: entry.address })
+    }
+  }
+  return found
+}
 
 function json(status, payload) {
   return { status, body: JSON.stringify(payload) }
@@ -58,6 +71,7 @@ export function createHandoffRoutes({
   readConfig = null,
   writeConfig = null,
   sendTest = null,
+  readInterfaces = localInterfaces,
 } = {}) {
   let nonce = null
   let expiresAt = 0
@@ -121,6 +135,10 @@ export function createHandoffRoutes({
 
         if (method === 'POST' && url === '/dsh-switch/report-config') {
           return respond(() => saveConfig(body))
+        }
+
+        if (method === 'GET' && url === '/dsh-switch/interfaces') {
+          return respond(async () => json(200, { interfaces: await readInterfaces() }))
         }
 
         if (method === 'POST' && url === '/dsh-switch/report-test') {
