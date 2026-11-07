@@ -1,8 +1,12 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { PROCESS_QUERY, isDesktopHost, isWebHost, killTree, listProcesses } from '../src/procs.mjs'
+import { PROCESS_QUERY, isDesktopHost, isElectronShell, isWebHost, killTree, listListeningPorts, listProcesses } from '../src/procs.mjs'
 
-const paths = { desktopProfile: 'C:\\u\\.dsh\\profiles\\desktop', webProfile: 'C:\\u\\.dsh\\profiles\\web' }
+const paths = {
+  desktopProfile: 'C:\\u\\.dsh\\profiles\\desktop',
+  webProfile: 'C:\\u\\.dsh\\profiles\\web',
+  exe: 'C:\\l\\DeepSeek Harness.exe',
+}
 
 test('the process query forces UTF-8 before reading command lines', () => {
   assert.match(PROCESS_QUERY, /OutputEncoding/)
@@ -19,6 +23,22 @@ test('isWebHost accepts the explicit and the default profile form', () => {
   assert.equal(isWebHost({ commandLine: 'x "...\\cli.js" web --host 127.0.0.1 --port 3080' }, paths), true)
   assert.equal(isWebHost({ commandLine: 'x "...\\cli.js" --profile web web' }, paths), true)
   assert.equal(isWebHost({ commandLine: 'x "…\\dsh-desktop-host\\lib\\index.js" "…\\profiles\\desktop"' }, paths), false)
+})
+
+test('isElectronShell matches the app executable but never the desktop host', () => {
+  assert.equal(isElectronShell({ commandLine: '"C:\\l\\DeepSeek Harness.exe" --no-sandbox' }, paths), true)
+  assert.equal(isElectronShell({ commandLine: 'C:/l/DeepSeek Harness.exe' }, paths), true)
+  assert.equal(isElectronShell({
+    commandLine: '"C:\\l\\DeepSeek Harness.exe" --expose-internals dsh-desktop-host "C:\\u\\.dsh\\profiles\\desktop"',
+  }, paths), false)
+  assert.equal(isElectronShell({ commandLine: 'C:\\l\\node.exe other.js' }, paths), false)
+})
+
+test('listListeningPorts reads the listening ports owned by one pid', async () => {
+  const seen = []
+  const run = async (args) => { seen.push(args); return { stdout: '27180\r\n27181\r\n' } }
+  assert.deepEqual(await listListeningPorts(4321, { run }), [27180, 27181])
+  assert.match(seen[0].join(' '), /4321/)
 })
 
 test('listProcesses tolerates a single-object JSON payload', async () => {

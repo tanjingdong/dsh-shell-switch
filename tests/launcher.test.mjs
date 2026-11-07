@@ -1,6 +1,14 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { switchTo, fetchBusy, detectCurrent } from '../src/launcher.mjs'
+import { switchTo, fetchBusy, detectCurrent, startClient, stopShell, waitForClient } from '../src/launcher.mjs'
+
+const clientPaths = {
+  desktopProfile: 'C:\\u\\.dsh\\profiles\\desktop',
+  webProfile: 'C:\\u\\.dsh\\profiles\\web',
+  exe: 'C:\\l\\DeepSeek Harness.exe',
+}
+const desktopHost = { pid: 11, commandLine: 'x\\dsh-desktop-host\\lib\\index.js C:\\u\\.dsh\\profiles\\desktop' }
+const electronShell = { pid: 10, commandLine: '"C:\\l\\DeepSeek Harness.exe"' }
 
 test('switchTo retries three times then throws without restarting the old shell', async () => {
   let starts = 0
@@ -55,6 +63,75 @@ test('switchTo re-picks the port before every attempt', async () => {
   }
   await assert.rejects(switchTo('web', deps), (error) => error.code === 'start-failed')
   assert.deepEqual(ports, [3080, 3081, 3082])
+})
+
+test('stopShell kills the desktop host and then the Electron shell around it', async () => {
+  const killed = []
+  const ids = await stopShell({
+    current: 'client',
+    paths: clientPaths,
+    list: async () => [electronShell, desktopHost],
+    kill: async (pid, options) => { killed.push([pid, options]) },
+  })
+  assert.deepEqual(ids, [11, 10])
+  assert.deepEqual(killed.map(([pid]) => pid), [11, 10])
+})
+
+test('switchTo ends the shell too when leaving the desktop client', async () => {
+  const killed = []
+  await switchTo('web', {
+    paths: clientPaths, force: true, log: () => {},
+    list: async () => [electronShell, desktopHost],
+    kill: async (pid) => { killed.push(pid) },
+    startWeb: async () => {},
+  })
+  assert.deepEqual(killed, [11, 10])
+})
+
+test('startClient reports the shell pid only after the host listens', async () => {
+  const result = await startClient({
+    paths: clientPaths,
+    spawnShell: () => 99,
+    wait: async () => ({ pid: 11, port: 27180 }),
+  })
+  assert.deepEqual(result, { shellPid: 99, pid: 11, port: 27180 })
+})
+
+test('startClient surfaces a readiness failure instead of reporting success', async () => {
+  await assert.rejects(
+    startClient({ paths: clientPaths, spawnShell: () => 99, wait: async () => { throw new Error('no host') } }),
+    /no host/,
+  )
+})
+
+test('waitForClient waits until the desktop host listens and reports the port', async () => {
+  let calls = 0
+  const result = await waitForClient({
+    paths: clientPaths,
+    list: async () => { calls += 1; return calls >= 2 ? [desktopHost] : [] },
+    ports: async () => [27180],
+    intervalMs: 1,
+  })
+  assert.deepEqual(result, { pid: 11, port: 27180 })
+})
+
+test('waitForClient refuses to claim success when no host appears', async () => {
+  await assert.rejects(
+    waitForClient({ paths: clientPaths, list: async () => [], ports: async () => [], timeoutMs: 5, intervalMs: 1 }),
+    (error) => error.code === 'client-not-ready',
+  )
+})
+
+test('waitForClient waits for a listening port, not just the process', async () => {
+  let polls = 0
+  const result = await waitForClient({
+    paths: clientPaths,
+    list: async () => [desktopHost],
+    ports: async () => { polls += 1; return polls >= 3 ? [27180] : [] },
+    intervalMs: 1,
+  })
+  assert.equal(result.port, 27180)
+  assert.ok(polls >= 3)
 })
 
 test('detectCurrent reports the shell that owns the profile', async () => {

@@ -1,5 +1,12 @@
+import { spawn } from 'node:child_process'
 import { LauncherError } from './errors.mjs'
-import { isDesktopHost, isWebHost, killTree, listProcesses } from './procs.mjs'
+import {
+  isDesktopHost, isElectronShell, isWebHost, killTree, listListeningPorts, listProcesses,
+} from './procs.mjs'
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
 
 /** Which shell currently owns the desktop profile, if any. */
 export async function detectCurrent({ paths, list = listProcesses } = {}) {
@@ -24,12 +31,63 @@ export async function fetchBusy({ port, fetchImpl = globalThis.fetch, timeoutMs 
   }
 }
 
-async function stopCurrent({ current, paths, list, kill }) {
+/**
+ * End the shell that owns `current`. The desktop client is a host child inside
+ * an Electron window, so both must go: killing only the host leaves a window
+ * stuck on the fatal-recovery dialog and blocks the next client start.
+ */
+export async function stopShell({ current, paths, list = listProcesses, kill = killTree }) {
   const processes = await list()
-  const match = processes.find((process) => (
-    current === 'client' ? isDesktopHost(process, paths) : isWebHost(process, paths)
-  ))
-  if (match) await kill(match.pid, { force: true })
+  const targets = current === 'client'
+    ? [
+      ...processes.filter((process) => isDesktopHost(process, paths)),
+      ...processes.filter((process) => isElectronShell(process, paths)),
+    ]
+    : processes.filter((process) => isWebHost(process, paths))
+  const killed = []
+  for (const target of targets) {
+    await kill(target.pid, { force: true })
+    killed.push(target.pid)
+  }
+  return killed
+}
+
+/** Poll until the desktop host exists and owns a listening port. */
+export async function waitForClient({
+  paths, list = listProcesses, ports = listListeningPorts, timeoutMs = 20000, intervalMs = 500,
+} = {}) {
+  const deadline = Date.now() + timeoutMs
+  do {
+    const processes = await list()
+    const host = processes.find((process) => isDesktopHost(process, paths))
+    if (host) {
+      const open = await ports(host.pid).catch(() => [])
+      if (open.length > 0) return { pid: host.pid, port: open[0] }
+    }
+    if (Date.now() >= deadline) break
+    await sleep(intervalMs)
+  } while (Date.now() < deadline)
+  throw new LauncherError(
+    'client-not-ready',
+    '桌面客户端没有在预期时间内就绪（未发现 dsh-desktop-host 或其监听端口）。'
+    + '可手动打开客户端，或重新运行 dsh-switch client',
+  )
+}
+
+function defaultSpawnShell(paths) {
+  const child = spawn(paths.exe, [], { detached: true, stdio: 'ignore', windowsHide: false })
+  child.unref()
+  return child.pid
+}
+
+/**
+ * Start the desktop client and only report success once its host is listening.
+ * A window that never comes up is a failure, not a success.
+ */
+export async function startClient({ paths, spawnShell = defaultSpawnShell, wait = waitForClient }) {
+  const shellPid = spawnShell(paths)
+  const ready = await wait({ paths })
+  return { shellPid, pid: ready.pid, port: ready.port }
 }
 
 /**
@@ -56,7 +114,7 @@ export async function switchTo(target, deps) {
     if (busy === null && !force) {
       throw new LauncherError('busy-unconfirmed', '无法确认当前是否空闲（状态接口不可用）；确认后加 --force')
     }
-    await stopCurrent({ current, paths, list, kill })
+    await stopShell({ current, paths, list, kill })
   }
 
   let lastError

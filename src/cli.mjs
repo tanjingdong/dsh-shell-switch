@@ -4,7 +4,7 @@ import { assertInstalled, resolvePaths } from './paths.mjs'
 import { reservePort } from './ports.mjs'
 import { killTree } from './procs.mjs'
 import { readState, writeState } from './state.mjs'
-import { fetchBusy, status, switchTo } from './launcher.mjs'
+import { fetchBusy, startClient, status, switchTo } from './launcher.mjs'
 import { startWeb } from './web.mjs'
 
 const COMMANDS = ['menu', 'client', 'web', 'status', 'stop']
@@ -109,9 +109,12 @@ export async function run(argv = process.argv.slice(2), overrides = {}) {
       return result
     },
     startClient: async () => {
-      const { spawn } = await import('node:child_process')
-      spawn(paths.exe, [], { detached: true, stdio: 'ignore', windowsHide: false }).unref()
-      await writeState(paths.stateFile, { mode: 'client', pid: 0, startedAt: new Date().toISOString() })
+      const ready = await startClient({ paths })
+      await writeState(paths.stateFile, {
+        mode: 'client', pid: ready.pid, port: ready.port,
+        shellPid: ready.shellPid, startedAt: new Date().toISOString(),
+      })
+      return ready
     },
   })
   return 0

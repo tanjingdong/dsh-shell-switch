@@ -38,6 +38,26 @@ export function isDesktopHost(process, paths) {
   return cmd.includes('dsh-desktop-host') && cmd.includes(normalize(paths.desktopProfile))
 }
 
+/** The Electron window shell itself, as opposed to its desktop host child. */
+export function isElectronShell(process, paths) {
+  const cmd = normalize(process.commandLine)
+  return cmd.includes(normalize(paths.exe)) && !cmd.includes('dsh-desktop-host')
+}
+
+const LISTEN_QUERY = (pid) => '[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false); '
+  + `Get-NetTCPConnection -State Listen -OwningProcess ${Math.trunc(Number(pid))} -ErrorAction SilentlyContinue `
+  + '| Select-Object -ExpandProperty LocalPort'
+
+/** Listening TCP ports owned by one pid. Unreadable reads as none. */
+export async function listListeningPorts(pid, { run = defaultRun } = {}) {
+  const { stdout } = await run(['-NoProfile', '-Command', LISTEN_QUERY(pid)])
+  return String(stdout ?? '')
+    .replace(/^\uFEFF/, '')
+    .split(/[\r\n]+/)
+    .map((line) => Number(line.trim()))
+    .filter((port) => Number.isInteger(port) && port > 0)
+}
+
 /** A CLI web host serving the web profile (explicit or default form). */
 export function isWebHost(process, paths) {
   const cmd = normalize(process.commandLine)
