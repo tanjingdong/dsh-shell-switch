@@ -6,27 +6,44 @@ import { detectCurrent } from '../src/launcher.mjs'
 
 const PLUGIN_DIR = path.dirname(fileURLToPath(new URL('../plugin/index.mjs', import.meta.url)))
 
-function run(file, args) {
+/** Run the CLI, capturing stdout so the dump can be inspected. */
+function runCli(file, args) {
   return new Promise((resolve) => {
-    const child = spawn(file, args, { stdio: 'inherit', env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' } })
-    child.on('exit', (code) => resolve(code ?? 1))
+    let stdout = ''
+    const child = spawn(file, args, {
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+      stdio: ['ignore', 'pipe', 'inherit'],
+      windowsHide: true,
+    })
+    child.stdout.on('data', (chunk) => { stdout += chunk.toString() })
+    child.on('error', () => resolve({ code: 1, stdout }))
+    child.on('exit', (code) => resolve({ code: code ?? 1, stdout }))
   })
 }
 
-/** Install the plugin into the Electron-managed desktop profile. */
-export async function install({ paths = resolvePaths() } = {}) {
-  assertInstalled(paths)
-  const current = await detectCurrent({ paths })
+/**
+ * Install the plugin into the desktop profile, then prove it lands where both
+ * shells will read it. `web` is the shared profile after cutover, so dumping
+ * `web` is the check that actually runs; `desktop` alone is not.
+ */
+export async function install({
+  paths = resolvePaths(), exists, detect, run = runCli,
+} = {}) {
+  assertInstalled(paths, exists)
+  const current = detect ? await detect() : await detectCurrent({ paths })
   if (current !== null) {
     throw new Error('请先关闭桌面客户端与 Web 外壳，再安装插件')
   }
-  const code = await run(paths.exe, [
+  const added = await run(paths.exe, [
     '--expose-internals', paths.cliJs,
     'plugin', '--profile', 'desktop', 'add', `link:${PLUGIN_DIR}`,
   ])
-  if (code !== 0) throw new Error(`安装失败（退出码 ${code}）`)
-  const verify = await run(paths.exe, ['--expose-internals', paths.cliJs, '--profile', 'desktop', '--dump-config'])
-  if (verify !== 0) throw new Error('安装后 --dump-config 失败，请检查 profile')
+  if (added.code !== 0) throw new Error(`安装失败（退出码 ${added.code}）`)
+  const verify = await run(paths.exe, ['--expose-internals', paths.cliJs, '--profile', 'web', '--dump-config'])
+  if (verify.code !== 0) throw new Error('安装后 --profile web --dump-config 失败，请检查 profile')
+  if (!String(verify.stdout ?? '').includes('dsh-shell-switch')) {
+    throw new Error('安装完成但插件没有出现在 web profile 的 --dump-config 中')
+  }
   return true
 }
 
