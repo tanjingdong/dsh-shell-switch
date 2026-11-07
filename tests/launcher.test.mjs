@@ -85,6 +85,18 @@ test('stopEverything also ends the relay process recorded in the state', async (
   assert.deepEqual(killed, [20, 30])
 })
 
+test('stopEverything ends a leftover relay even when no shell is running', async () => {
+  const killed = []
+  const result = await stopEverything({
+    paths: clientPaths,
+    state: { relayPid: 30 },
+    list: async () => [],
+    kill: async (pid, options) => { killed.push([pid, options]) },
+  })
+  assert.deepEqual(result, { current: null, killed: [30] })
+  assert.deepEqual(killed, [[30, { force: true, timeoutMs: 0 }]])
+})
+
 test('stopEverything reports nothing running when no shell is detected', async () => {
   const result = await stopEverything({ paths: clientPaths, state: null, list: async () => [], kill: async () => {} })
   assert.deepEqual(result, { current: null, killed: [] })

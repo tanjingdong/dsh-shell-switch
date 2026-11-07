@@ -162,7 +162,15 @@ export async function stopEverything({
   paths, state, current, list = listProcesses, kill = killTree, timeoutMs = 10000,
 }) {
   const running = current ?? await detectCurrent({ paths, list })
-  if (!running) return { current: null, killed: [] }
+  if (!running) {
+    const killed = []
+    if (state?.relayPid) {
+      // The host died but its relay survived; stop must still clean it up.
+      await kill(state.relayPid, { force: true, timeoutMs: 0 }).catch(() => {})
+      killed.push(state.relayPid)
+    }
+    return { current: null, killed }
+  }
   const killed = await stopShell({ current: running, paths, list, kill, timeoutMs })
   if (state?.relayPid && !killed.includes(state.relayPid)) {
     // The relay holds no user data; there is nothing to wait for.

@@ -109,18 +109,22 @@ export async function run(argv = process.argv.slice(2), overrides = {}) {
 
   if (resolved === 'stop') {
     const current = await detectCurrent({ paths })
-    if (!current) {
-      write('没有外壳在运行')
-      return 0
-    }
     const notice = stopNotice(current, now)
     if (notice) write(notice)
     const result = await stopEverything({
       paths, state, current, timeoutMs: now ? 0 : 10000,
     })
+    if (!result.current && result.killed.length === 0) {
+      write('没有外壳在运行')
+      return 0
+    }
     await writeState(paths.stateFile, {
-      ...state, mode: current, stoppedAt: new Date().toISOString(),
+      ...state, mode: result.current, stoppedAt: new Date().toISOString(),
     })
+    if (!result.current) {
+      write('已结束残留的 relay 进程')
+      return 0
+    }
     write(result.killed.length > 0 ? '已停止' : '停止失败，进程仍然存在')
     return result.killed.length > 0 ? 0 : 1
   }
