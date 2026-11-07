@@ -203,6 +203,23 @@ test('switchTo ends the relay of the shell it is leaving', async () => {
   assert.deepEqual(killed, [20, 30])
 })
 
+test('a web host is ended at once, while the client keeps the graceful wait', async () => {
+  const calls = []
+  const webHost = { pid: 20, name: 'node.exe', commandLine: 'x\\cli.js web --host 127.0.0.1 --port 3080' }
+  await stopShell({
+    current: 'web', paths: clientPaths, list: async () => [webHost],
+    kill: async (pid, options) => { calls.push([pid, options]) }, protect: [999], timeoutMs: 10000,
+  })
+  assert.equal(calls[0][1].timeoutMs, 0)
+
+  const clientCalls = []
+  await stopShell({
+    current: 'client', paths: clientPaths, list: async () => [desktopHost, electronShell],
+    kill: async (pid, options) => { clientCalls.push([pid, options]) }, protect: [999], timeoutMs: 10000,
+  })
+  assert.ok(clientCalls.every(([, options]) => options.timeoutMs === 10000))
+})
+
 test('stopShell never targets critical system processes that look like children', async () => {
   const killed = []
   const processes = [

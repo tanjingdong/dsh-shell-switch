@@ -76,6 +76,9 @@ export async function stopShell({
 
   for (const target of targets) {
     const pid = Number(target.pid)
+    // Only the desktop client can have unsaved work worth a graceful wait; a
+    // web host holds nothing, so waiting on it just makes stop feel hung.
+    const targetTimeout = current === 'client' ? timeoutMs : 0
     // Support processes first, so a dying parent cannot orphan them. These are
     // best effort: a refusal (often a system process mis-attributed by a stale
     // parent pid) must not abort the switch.
@@ -93,7 +96,7 @@ export async function stopShell({
         /* leave it: the shell below still has to die */
       }
     }
-    await end(pid, { force: true, timeoutMs, tree: false })
+    await end(pid, { force: true, timeoutMs: targetTimeout, tree: false })
   }
   return killed
 }

@@ -42,9 +42,14 @@ export function noopNotice(current) {
   return `当前已经是${current === 'client' ? '桌面客户端' : '浏览器 Web'}，无需切换`
 }
 
+/** Printed before a stop that may take a moment, so the window is not blank. */
+export function stopStartLine(current) {
+  if (!current) return null
+  return `正在停止${current === 'client' ? '桌面客户端' : '浏览器 Web'}…`
+}
+
 /** What `stop` ended, in words a user can check against the task list. */
-export function stopResultLine({ current, killed = [] } = {}) {
-  const label = current === 'client' ? '桌面客户端' : current === 'web' ? '浏览器 Web' : null
+export function stopResultLine({ current, killed = [] } = {}) {  const label = current === 'client' ? '桌面客户端' : current === 'web' ? '浏览器 Web' : null
   const pids = killed.join('、')
   if (!current) {
     return killed.length > 0 ? `已结束残留的 relay 进程（pid ${pids}）` : '没有外壳在运行'
@@ -175,6 +180,8 @@ export async function run(argv = process.argv.slice(2), overrides = {}) {
     const current = await detectCurrent({ paths })
     const notice = stopNotice(current, now)
     if (notice) write(notice)
+    const startLine = stopStartLine(current)
+    if (startLine) write(startLine)
     const result = await stopEverything({
       paths, state, current, timeoutMs: now ? 0 : 10000,
     })

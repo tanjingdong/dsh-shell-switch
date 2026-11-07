@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { noopNotice, parseArgs, preferredPortFor, renderMenu, statusLine, stopNotice, stopResultLine, switchWithConsent } from '../src/cli.mjs'
+import { noopNotice, parseArgs, preferredPortFor, renderMenu, statusLine, stopNotice, stopResultLine, stopStartLine, switchWithConsent } from '../src/cli.mjs'
 
 test('parseArgs defaults to menu and accepts --force and --now', () => {
   assert.deepEqual(parseArgs([]), { command: 'menu', force: false, now: false })
@@ -23,6 +23,12 @@ test('renderMenu lists the four choices', () => {
   assert.match(menu, /2\).*Web/)
   assert.match(menu, /3\).*状态/)
   assert.match(menu, /4\).*停止/)
+})
+
+test('stop announces itself before the wait, so the window is never blank', () => {
+  assert.equal(stopStartLine(null), null)
+  assert.match(stopStartLine('client'), /正在停止桌面客户端/)
+  assert.match(stopStartLine('web'), /正在停止浏览器 Web/)
 })
 
 test('stop says what it ended, by name and pid', () => {
