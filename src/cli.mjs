@@ -6,7 +6,9 @@ import { assertInstalled, resolvePaths } from './paths.mjs'
 import { reservePort } from './ports.mjs'
 import { readState, writeState } from './state.mjs'
 import { fetchBusy, currentHostPort, detectCurrent, startClient, status, stopEverything, switchTo } from './launcher.mjs'
-import { startWeb, showUrlDialog } from './web.mjs'
+import { reportSwitch, sendWebhook } from './report.mjs'
+import { readReportConfig, reportConfigFile } from './report-config.mjs'
+import { copyToClipboard, showUrlDialog, startWeb } from './web.mjs'
 
 const COMMANDS = ['menu', 'client', 'web', 'status', 'stop']
 
@@ -52,6 +54,34 @@ export function statusLine(info = {}) {
 export function preferredPortFor(target, state) {
   if (target === 'web') return 3080
   return state?.port ?? 3080
+}
+
+/**
+ * Report a finished switch through the channels the user enabled.
+ * A report failure is logged and never changes the switch result.
+ */
+export async function runReport({ paths, info, deps = {} } = {}) {
+  const log = deps.log ?? (() => {})
+  const read = deps.read ?? ((file) => readReportConfig(file))
+  const report = deps.report ?? ((args) => reportSwitch(args))
+  try {
+    const config = await read(reportConfigFile(paths))
+    return await report({
+      config,
+      info,
+      copy: deps.copy ?? (({ url }) => copyToClipboard({
+        url, logFile: path.join(paths.logDir, 'url-clipboard.log'),
+      })),
+      dialog: deps.dialog ?? (({ url }) => showUrlDialog({
+        url, logFile: path.join(paths.logDir, 'url-dialog.log'),
+      })),
+      send: deps.send ?? ((args) => sendWebhook(args)),
+      log,
+    })
+  } catch (error) {
+    log(`[report] 上报失败：${error?.message ?? error}`)
+    return null
+  }
 }
 
 /** The no-argument menu. */
@@ -150,8 +180,9 @@ export async function run(argv = process.argv.slice(2), overrides = {}) {
 
   const preferredPort = preferredPortFor(resolved, state)
   const busyPort = await currentHostPort({ paths, state })
+  let startedUrl = ''
 
-  await switchWithConsent(resolved, {
+  const switched = await switchWithConsent(resolved, {
     paths, force, log: write,
     port: preferredPort,
     relayPid: state?.relayPid,
@@ -161,13 +192,11 @@ export async function run(argv = process.argv.slice(2), overrides = {}) {
     startWeb: async ({ port }) => {
       const result = await startWeb({
         paths, port, addresses: LAN_ADDRESSES, log: write,
-        notifyUrl: ({ url }) => showUrlDialog({
-          url, logFile: path.join(paths.logDir, 'url-dialog.log'),
-        }),
         onSpawn: (pid) => writeState(paths.stateFile, {
           mode: 'web', pid, port, startedAt: new Date().toISOString(),
         }),
       })
+      startedUrl = result.url
       await writeState(paths.stateFile, {
         mode: 'web', pid: result.pid, port: result.port, url: result.url,
         relayPid: result.relayPid, startedAt: new Date().toISOString(),
@@ -183,6 +212,14 @@ export async function run(argv = process.argv.slice(2), overrides = {}) {
       return ready
     },
   }, { interactive: command === 'menu', confirm: askYesNo })
+
+  if (switched?.switched) {
+    await runReport({
+      paths,
+      info: { target: resolved, port: switched.port ?? preferredPort, url: startedUrl },
+      deps: { log: write },
+    })
+  }
   return 0
 }
 
