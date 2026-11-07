@@ -4,31 +4,31 @@ import fs from 'node:fs'
 import vm from 'node:vm'
 
 /** Load the browser bundle the host loads, without a DOM or a real react. */
-function loadBundle() {
+function loadBundle(globals = {}) {
   const code = fs.readFileSync(new URL('../plugin/client.js', import.meta.url), 'utf8')
   let entry = null
   const window = { __ModuleLoader__: { load: (value) => { entry = value } } }
-  vm.runInNewContext(code, { window })
+  vm.runInNewContext(code, { window, ...globals })
   assert.ok(entry, 'the bundle must register itself with __ModuleLoader__')
   return entry
 }
 
-function fakeReact() {
+function fakeReact({ firstState = true } = {}) {
   const states = []
   return {
     createElement: (type, props, ...children) => ({ type, props: props ?? {}, children }),
     useState: (initial) => {
       const index = states.length
       states.push(initial)
-      // The first hook is Entry's `open`; start it open so the panel renders.
-      return [index === 0 ? true : initial, () => {}]
+      // Entry's first hook is its `open` flag; only that one is forced.
+      return [index === 0 && firstState ? true : initial, () => {}]
     },
   }
 }
 
 /** Render through the slots registry and expand function components. */
-function mountBundle(bundle) {
-  const react = fakeReact()
+function mountBundle(bundle, options = {}) {
+  const react = fakeReact(options)
   const module = bundle.factory((name) => {
     assert.equal(name, 'react')
     return react
@@ -36,7 +36,7 @@ function mountBundle(bundle) {
   const registrations = []
   module.apply({
     slots: {
-      register: (options, render) => { registrations.push({ ...options, render }); return () => {} },
+      register: (options2, render) => { registrations.push({ ...options2, render }); return () => {} },
       inject: (name, mount) => { mount(); return () => {} },
     },
   })
@@ -115,6 +115,29 @@ test('the bundle registers a row config page for its own row', () => {
   const row = mountBundle(loadBundle()).find((entry) => entry.name === 'plugins.row.config')
   assert.ok(row, 'must register into plugins.row.config')
   assert.equal(row.key, 'dsh-shell-switch#dsh-shell-switch')
+})
+
+test('the row config page renders the three channels and the webhook fields', () => {
+  const bundle = loadBundle({
+    fetch: async () => ({
+      ok: true,
+      json: async () => ({ report: { clipboard: true, dialog: true, webhook: false }, webhook: { url: '', template: '{}' } }),
+    }),
+  })
+  const row = mountBundle(bundle, { firstState: false })
+    .find((entry) => entry.name === 'plugins.row.config')
+  const tree = expand(row.render({ view: 'page' }))
+  const words = texts(tree)
+  for (const expected of ['复制到剪贴板', '弹窗', '发送到网络', 'API 地址', 'JSON 模板', '保存', '发送测试']) {
+    assert.ok(words.includes(expected), `missing ${expected}: ${JSON.stringify(words)}`)
+  }
+  assert.ok(words.some((word) => word.includes('{url}')), 'placeholder help missing')
+})
+
+test('the row config page answers the summary view with a label', () => {
+  const row = mountBundle(loadBundle(), { firstState: false })
+    .find((entry) => entry.name === 'plugins.row.config')
+  assert.equal(row.render({ view: 'summary' }), '外壳切换')
 })
 
 test('the panel offers both shells and a close action', () => {

@@ -31,6 +31,111 @@ window.__ModuleLoader__.load({
     const choice = { ...button, textAlign: "left", padding: "8px 10px" };
     const noteStyle = { color: MUTED, fontSize: 12 };
 
+    const DEFAULT_CONFIG = {
+      report: { clipboard: true, dialog: true, webhook: false },
+      webhook: { url: "", template: '{"text":"DSH 外壳已切换到 {target}：{url}"}' },
+    };
+    const fieldStyle = { display: "flex", flexDirection: "column", gap: 4, fontSize: 12 };
+    const inputStyle = {
+      background: SURFACE, border: `1px solid ${EDGE}`, borderRadius: 4,
+      color: INK, fontSize: 12, padding: 6,
+    };
+    const checkStyle = { alignItems: "center", display: "flex", gap: 6, fontSize: 12 };
+
+    let configCache = null;
+    let configLoading = false;
+
+    async function postJson(url, payload) {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = await response.json().catch(() => ({}));
+      return { ok: response.ok, status: response.status, body };
+    }
+
+    function ConfigForm() {
+      const [model, setModel] = useState(configCache || DEFAULT_CONFIG);
+      const [notice, setNotice] = useState("");
+      const [busy, setBusy] = useState(false);
+
+      if (!configCache && !configLoading) {
+        configLoading = true;
+        fetch("/dsh-switch/report-config")
+          .then((response) => (response.ok ? response.json() : Promise.reject(new Error(`读取配置失败（${response.status}）`))))
+          .then((next) => { configCache = next; setModel(next); })
+          .catch((error) => setNotice(String(error && error.message ? error.message : error)))
+          .finally(() => { configLoading = false; });
+      }
+
+      const setReport = (key, value) => setModel((current) => ({
+        ...current, report: { ...current.report, [key]: value },
+      }));
+      const setWebhook = (key, value) => setModel((current) => ({
+        ...current, webhook: { ...current.webhook, [key]: value },
+      }));
+
+      const save = async () => {
+        setBusy(true);
+        try {
+          const result = await postJson("/dsh-switch/report-config", model);
+          if (!result.ok) {
+            setNotice((result.body.errors || [`保存失败（${result.status}）`]).join("；"));
+          } else {
+            configCache = result.body;
+            setModel(result.body);
+            setNotice("已保存");
+          }
+        } catch (error) {
+          setNotice(String(error && error.message ? error.message : error));
+        } finally {
+          setBusy(false);
+        }
+      };
+
+      const sendTest = async () => {
+        setBusy(true);
+        try {
+          const result = await postJson("/dsh-switch/report-test", {});
+          setNotice(result.ok
+            ? `测试已发送（HTTP ${result.body.status}）`
+            : `测试失败：${result.body.error || result.status}`);
+        } catch (error) {
+          setNotice(String(error && error.message ? error.message : error));
+        } finally {
+          setBusy(false);
+        }
+      };
+
+      return h("div", { style: { display: "flex", flexDirection: "column", gap: 10, maxWidth: 440, padding: 4 } },
+        h("label", { style: checkStyle },
+          h("input", { type: "checkbox", checked: model.report.clipboard === true, onChange: (e) => setReport("clipboard", e.target.checked) }),
+          "复制到剪贴板"),
+        h("label", { style: checkStyle },
+          h("input", { type: "checkbox", checked: model.report.dialog === true, onChange: (e) => setReport("dialog", e.target.checked) }),
+          "弹窗"),
+        h("label", { style: checkStyle },
+          h("input", { type: "checkbox", checked: model.report.webhook === true, onChange: (e) => setReport("webhook", e.target.checked) }),
+          "发送到网络"),
+        h("label", { style: fieldStyle }, "API 地址",
+          h("input", {
+            style: inputStyle, value: model.webhook.url, placeholder: "https://example.com/hook",
+            onChange: (e) => setWebhook("url", e.target.value),
+          })),
+        h("label", { style: fieldStyle }, "JSON 模板",
+          h("textarea", {
+            style: { ...inputStyle, minHeight: 90 }, value: model.webhook.template,
+            onChange: (e) => setWebhook("template", e.target.value),
+          })),
+        h("div", { style: noteStyle },
+          "占位符：{url} {token} {port} {target} {time}。{url} 与 {token} 会把本次登录凭证发给该地址。"),
+        h("div", { style: { display: "flex", gap: 8 } },
+          h("button", { style: choice, disabled: busy, onClick: save }, "保存"),
+          h("button", { style: choice, disabled: busy, onClick: sendTest }, "发送测试")),
+        notice !== "" && h("div", { style: noteStyle }, notice));
+    }
+
     async function readState() {
       const response = await fetch("/dsh-switch/state");
       if (!response.ok) throw new Error(`状态接口 ${response.status}`);
@@ -120,7 +225,7 @@ window.__ModuleLoader__.load({
       // names that row; the key is <package>#<row id>.
       const mountRow = () => ctx.slots.register(
         { name: "plugins.row.config", key: "dsh-shell-switch#dsh-shell-switch" },
-        ({ view }) => (view === "summary" ? "外壳切换" : h("div", null, "设置占位")),
+        ({ view }) => (view === "summary" ? "外壳切换" : h(ConfigForm)),
       );
       if (typeof ctx.slots.inject === "function") ctx.slots.inject("plugins.row.config", mountRow);
       else mountRow();
