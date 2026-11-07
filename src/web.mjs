@@ -114,10 +114,12 @@ function defaultOpen(url) {
  * the launcher's console, so put it where a human can copy it: clipboard plus
  * a dialog. The url travels through the environment, so no quoting bugs.
  */
-const URL_DIALOG_SCRIPT = [
+const CLIPBOARD_SCRIPT = 'Add-Type -AssemblyName System.Windows.Forms; '
+  + 'Set-Clipboard -Value $env:DSH_SWITCH_URL'
+
+const DIALOG_SCRIPT = [
   'Add-Type -AssemblyName System.Windows.Forms',
   '$u = $env:DSH_SWITCH_URL',
-  'Set-Clipboard -Value $u',
   '[void][System.Windows.Forms.MessageBox]::Show('
   + '"浏览器 Web 已启动。`n`n$u`n`n地址已复制到剪贴板，可直接粘贴到浏览器。", '
   + '"DSH 外壳切换", '
@@ -130,10 +132,10 @@ const URL_DIALOG_SCRIPT = [
  * goes through cmd (which gives it a console) as an encoded command (which
  * needs no quoting), with the url passed in the environment.
  */
-export function showUrlDialog({ url, spawnProcess = spawn, env = process.env, logFile }) {
+function runPowerShell({ script, url, spawnProcess = spawn, env = process.env, logFile }) {
   const out = logFile ? fs.openSync(logFile, 'a') : 'ignore'
   try {
-    const encoded = Buffer.from(URL_DIALOG_SCRIPT, 'utf16le').toString('base64')
+    const encoded = Buffer.from(script, 'utf16le').toString('base64')
     const child = spawnProcess(
       'cmd.exe',
       ['/c', 'powershell.exe', '-NoProfile', '-STA', '-EncodedCommand', encoded],
@@ -149,6 +151,15 @@ export function showUrlDialog({ url, spawnProcess = spawn, env = process.env, lo
   } finally {
     if (typeof out === 'number') fs.closeSync(out)
   }
+}
+
+/** Put the url on the clipboard; the dialog is a separate channel now. */
+export function copyToClipboard({ url, spawnProcess = spawn, env = process.env, logFile } = {}) {
+  return runPowerShell({ script: CLIPBOARD_SCRIPT, url, spawnProcess, env, logFile })
+}
+
+export function showUrlDialog({ url, spawnProcess = spawn, env = process.env, logFile } = {}) {
+  return runPowerShell({ script: DIALOG_SCRIPT, url, spawnProcess, env, logFile })
 }
 
 /**

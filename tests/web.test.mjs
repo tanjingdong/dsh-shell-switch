@@ -4,8 +4,8 @@ import { EventEmitter } from 'node:events'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import {
-  buildWebArgs, extractTokenUrl, showUrlDialog, spawnWebHost, waitForToken, waitReady,
-  startWeb, stopWeb,
+  buildWebArgs, copyToClipboard, extractTokenUrl, showUrlDialog, spawnWebHost, waitForToken,
+  waitReady, startWeb, stopWeb,
 } from '../src/web.mjs'
 
 const OK_LOG = 'dsh web: http://127.0.0.1:3080/?token=abc'
@@ -211,12 +211,26 @@ test('showUrlDialog runs the script through cmd so a detached powershell execute
   assert.ok(call.args.includes('-EncodedCommand'))
   const encoded = call.args[call.args.indexOf('-EncodedCommand') + 1]
   const script = Buffer.from(encoded, 'base64').toString('utf16le')
-  assert.match(script, /Set-Clipboard/)
   assert.match(script, /MessageBox/)
+  assert.ok(!script.includes('Set-Clipboard'), 'the dialog no longer copies by itself')
   assert.equal(call.options.env.DSH_SWITCH_URL, 'http://127.0.0.1:3080/?token=abc')
   assert.equal(call.options.detached, true)
   // The dialog must not inherit a pipe from the launcher either.
   assert.equal(typeof call.options.stdio[1], 'number')
+})
+
+test('copyToClipboard runs only the clipboard half', () => {
+  let call = null
+  copyToClipboard({
+    url: 'http://127.0.0.1:3080/?token=abc',
+    env: {},
+    spawnProcess: (file, args, options) => { call = { args, options }; return { pid: 7, unref: () => {} } },
+  })
+  const encoded = call.args[call.args.indexOf('-EncodedCommand') + 1]
+  const script = Buffer.from(encoded, 'base64').toString('utf16le')
+  assert.match(script, /Set-Clipboard/)
+  assert.ok(!script.includes('MessageBox'))
+  assert.equal(call.options.env.DSH_SWITCH_URL, 'http://127.0.0.1:3080/?token=abc')
 })
 
 test('stopWeb kills the relay process before the host', async () => {
