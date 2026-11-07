@@ -2,7 +2,17 @@
 
 已修复并验证：C1（安装检查读 asar）、C2（PowerShell UTF-8，真机识别 27180/24076）、C4（kill 不许谎报）、C5（`__ModuleLoader__` 包装）。
 
-以下按复审原文整理，仍未处理。修完每一项都要先写失败测试。
+## 本轮（第二轮）已修完
+
+C3、C6、C7 与 I1–I15 全部处理，每一项都是先写失败测试再实现；`npm test` 84 项全绿。
+下面保留复审原文作为对照，条目行内的「修：」即本轮落点。
+
+- C3：`src/relay.mjs` 成为独立 CLI，`spawn` 成脱离进程，`relayPid` 写入 state，`stop` 时结束。
+- C6：`startWeb` 任何失败都会杀掉已起的 host 与 relay；`switchTo` 每次尝试前经 `pickPort`/`reservePort` 重探端口；`onSpawn` 在等待就绪前写 pid。
+- C7：`stopShell` 同时结束 `dsh-desktop-host` 与 Electron 外壳；`startClient`/`waitForClient` 只有 host 出现且拥有监听端口才返回。
+- I1 `known:false` → `null`；I2 占用时 `reservePort` 换端口；I3 `stopEverything` 以进程列表为准并清 relay；I4 `switchWithConsent` 菜单确认后带 force，且 `currentHostPort` 可从 host pid 查监听端口；I5 同 C7；I6 `createLauncherSpawner` 挂 error 并写日志、`resolveNodeBinary` 有 vendored node 回退；I7 忙碌判定加入 jobs、inbox、审批；I8 用 `--profile web --dump-config` 断言插件出现；I9 `verifyCutover` + 联接目标校验 + `--revert` 入口 + 外壳未关时拒绝；I10 `src/log.mjs` tee 到 `logs/<时间戳>.log` 并在失败信息里给路径；I11 `detectCurrent` 读失败抛 `process-query-failed` 并拒绝切换；I12 就绪探测加 `GET /`；I13 relay 定期重试失败地址（unref）；I14 `stop --now` 立即模式 + 数据丢失提示；I15 修 `wait` 注入键并补齐五类 Review Focus 测试。
+
+以下按复审原文整理。
 
 ## Critical
 
