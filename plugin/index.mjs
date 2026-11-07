@@ -81,6 +81,38 @@ function send(res, result) {
   res.end(result.body)
 }
 
+/** Every path the client calls; each must be registered or the host 404s it. */
+export const ROUTE_PATHS = [
+  '/dsh-switch/state',
+  '/dsh-switch/handoff',
+  '/dsh-switch/report-config',
+  '/dsh-switch/report-test',
+]
+
+/** Mount the shared handler on every route the client calls. */
+export function mountRoutes(host, routes) {
+  const server = host?.webServer
+  if (!server || typeof server.register !== 'function' || typeof host.effect !== 'function') return false
+  const handler = (req, res) => {
+    let body = ''
+    req.on('data', (chunk) => {
+      body += chunk
+      if (body.length > 8192) req.destroy()
+    })
+    req.on('end', () => {
+      const remote = { remoteAddress: req.socket?.remoteAddress }
+      Promise.resolve(routes.handle(req.method, req.url, req.headers, remote, body))
+        .then((result) => send(res, result))
+        .catch(() => send(res, { status: 500, body: JSON.stringify({ error: 'handler-error' }) }))
+    })
+    req.on('error', () => send(res, { status: 500, body: JSON.stringify({ error: 'request-error' }) }))
+  }
+  for (const path of ROUTE_PATHS) {
+    host.effect(() => server.register({ kind: 'exact', path, handler }))
+  }
+  return true
+}
+
 export function apply(ctx) {
   const paths = resolvePaths()
   const logger = createLogger({ paths })
@@ -105,26 +137,7 @@ export function apply(ctx) {
     },
   })
 
-  const mount = (host) => {
-    const server = host?.webServer
-    if (!server || typeof server.register !== 'function' || typeof host.effect !== 'function') return
-    const handler = (req, res) => {
-      let body = ''
-      req.on('data', (chunk) => {
-        body += chunk
-        if (body.length > 8192) req.destroy()
-      })
-      req.on('end', () => {
-        const remote = { remoteAddress: req.socket?.remoteAddress }
-        Promise.resolve(routes.handle(req.method, req.url, req.headers, remote, body))
-          .then((result) => send(res, result))
-          .catch(() => send(res, { status: 500, body: JSON.stringify({ error: 'handler-error' }) }))
-      })
-      req.on('error', () => send(res, { status: 500, body: JSON.stringify({ error: 'request-error' }) }))
-    }
-    host.effect(() => server.register({ kind: 'exact', path: '/dsh-switch/state', handler }))
-    host.effect(() => server.register({ kind: 'exact', path: '/dsh-switch/handoff', handler }))
-  }
+  const mount = (host) => mountRoutes(host, routes)
 
   if (typeof ctx.inject === 'function') {
     try {

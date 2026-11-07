@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
-import { createLauncherSpawner, readActivity, resolveNodeBinary } from '../plugin/index.mjs'
+import { createLauncherSpawner, mountRoutes, readActivity, resolveNodeBinary } from '../plugin/index.mjs'
 
 test('readActivity counts running agents, jobs and waiting approvals', () => {
   const registry = {
@@ -29,6 +29,27 @@ test('resolveNodeBinary prefers an explicit node, then the vendored one, then PA
     resolveNodeBinary({ env: { DSH_SWITCH_NODE: 'C:\\n\\node.exe' }, exists: (file) => file === 'C:\\n\\node.exe' }),
     'C:\\n\\node.exe',
   )
+})
+
+test('every route the client calls is mounted on the host web server', () => {
+  const registered = []
+  const host = {
+    webServer: { register: (options) => { registered.push(options.path); return () => {} } },
+    effect: (fn) => { fn(); return () => {} },
+  }
+  assert.equal(mountRoutes(host, { handle: () => ({ status: 200, body: '{}' }) }), true)
+  for (const path of [
+    '/dsh-switch/state',
+    '/dsh-switch/handoff',
+    '/dsh-switch/report-config',
+    '/dsh-switch/report-test',
+  ]) {
+    assert.ok(registered.includes(path), `missing route ${path}: ${JSON.stringify(registered)}`)
+  }
+})
+
+test('mountRoutes reports when the host has no web server', () => {
+  assert.equal(mountRoutes({}, { handle: () => ({}) }), false)
 })
 
 test('the launcher spawner logs a spawn failure instead of losing it', () => {
