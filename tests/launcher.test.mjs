@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { switchTo, fetchBusy, currentHostPort, detectCurrent, startClient, stopEverything, stopShell, waitForClient } from '../src/launcher.mjs'
+import { switchTo, fetchBusy, currentHostPort, detectCurrent, spawnShell, startClient, stopEverything, stopShell, waitForClient } from '../src/launcher.mjs'
 import { relayScriptFile } from '../src/procs.mjs'
 
 const clientPaths = {
@@ -154,10 +154,30 @@ test('switchTo ends the shell too when leaving the desktop client', async () => 
   assert.deepEqual(killed, [11, 10])
 })
 
+test('spawnShell starts the GUI without the node mode inherited from a host', () => {
+  let call = null
+  spawnShell({
+    paths: { exe: 'C:\\l\\DeepSeek Harness.exe' },
+    env: { ELECTRON_RUN_AS_NODE: '1', PATH: 'C:\\bin' },
+    spawnImpl: (file, args, options) => {
+      call = { file, args, options }
+      return { pid: 9, unref: () => { call.unrefed = true } }
+    },
+  })
+  assert.equal(call.file, 'C:\\l\\DeepSeek Harness.exe')
+  assert.deepEqual(call.args, [])
+  assert.equal(call.options.detached, true)
+  // The launcher runs under ELECTRON_RUN_AS_NODE when a web host spawned it;
+  // passing that on would start the app as node and no window would appear.
+  assert.equal(call.options.env.ELECTRON_RUN_AS_NODE, undefined)
+  assert.equal(call.options.env.PATH, 'C:\\bin')
+  assert.equal(call.unrefed, true)
+})
+
 test('startClient reports the shell pid only after the host listens', async () => {
   const result = await startClient({
     paths: clientPaths,
-    spawnShell: () => 99,
+    spawnShell: () => ({ pid: 99 }),
     wait: async () => ({ pid: 11, port: 27180 }),
   })
   assert.deepEqual(result, { shellPid: 99, pid: 11, port: 27180 })
@@ -165,9 +185,22 @@ test('startClient reports the shell pid only after the host listens', async () =
 
 test('startClient surfaces a readiness failure instead of reporting success', async () => {
   await assert.rejects(
-    startClient({ paths: clientPaths, spawnShell: () => 99, wait: async () => { throw new Error('no host') } }),
+    startClient({ paths: clientPaths, spawnShell: () => ({ pid: 99 }), wait: async () => { throw new Error('no host') } }),
     /no host/,
   )
+})
+
+test('switchTo ends the relay of the shell it is leaving', async () => {
+  const killed = []
+  const webHost = { pid: 20, commandLine: 'x\\cli.js web --host 127.0.0.1 --port 3080' }
+  await switchTo('client', {
+    paths: clientPaths, force: true, log: () => {},
+    list: async () => [webHost],
+    kill: async (pid) => { killed.push(pid) },
+    relayPid: 30,
+    startClient: async () => {},
+  })
+  assert.deepEqual(killed, [20, 30])
 })
 
 test('stopShell never kills its own process while ending the shell tree', async () => {

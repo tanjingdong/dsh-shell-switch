@@ -193,7 +193,7 @@ test('a failing url dialog never tears down a host that is already up', async ()
   assert.equal(result.relayPid, 1)
 })
 
-test('showUrlDialog copies the url and shows it in a message box', () => {
+test('showUrlDialog runs the script through cmd so a detached powershell executes', () => {
   let call = null
   const child = { pid: 12, unref: () => {} }
   showUrlDialog({
@@ -205,11 +205,14 @@ test('showUrlDialog copies the url and shows it in a message box', () => {
       return child
     },
   })
-  assert.equal(call.file, 'powershell.exe')
-  const command = call.args.join(' ')
-  assert.match(command, /-STA/)
-  assert.match(command, /Set-Clipboard/)
-  assert.match(command, /MessageBox/)
+  // A bare detached powershell silently does nothing; cmd gives it a console.
+  assert.equal(call.file, 'cmd.exe')
+  assert.deepEqual(call.args.slice(0, 3), ['/c', 'powershell.exe', '-NoProfile'])
+  assert.ok(call.args.includes('-EncodedCommand'))
+  const encoded = call.args[call.args.indexOf('-EncodedCommand') + 1]
+  const script = Buffer.from(encoded, 'base64').toString('utf16le')
+  assert.match(script, /Set-Clipboard/)
+  assert.match(script, /MessageBox/)
   assert.equal(call.options.env.DSH_SWITCH_URL, 'http://127.0.0.1:3080/?token=abc')
   assert.equal(call.options.detached, true)
   // The dialog must not inherit a pipe from the launcher either.

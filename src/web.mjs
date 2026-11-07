@@ -125,16 +125,26 @@ const URL_DIALOG_SCRIPT = [
   + '[System.Windows.Forms.MessageBoxIcon]::Information)',
 ].join('; ')
 
+/**
+ * A bare detached powershell exits with code 0 and runs nothing, so the script
+ * goes through cmd (which gives it a console) as an encoded command (which
+ * needs no quoting), with the url passed in the environment.
+ */
 export function showUrlDialog({ url, spawnProcess = spawn, env = process.env, logFile }) {
   const out = logFile ? fs.openSync(logFile, 'a') : 'ignore'
   try {
-    const child = spawnProcess('powershell.exe', ['-NoProfile', '-STA', '-Command', URL_DIALOG_SCRIPT], {
-      env: { ...env, DSH_SWITCH_URL: String(url ?? '') },
-      detached: true,
-      stdio: ['ignore', out, out],
-      windowsHide: true,
-    })
-    child.unref()
+    const encoded = Buffer.from(URL_DIALOG_SCRIPT, 'utf16le').toString('base64')
+    const child = spawnProcess(
+      'cmd.exe',
+      ['/c', 'powershell.exe', '-NoProfile', '-STA', '-EncodedCommand', encoded],
+      {
+        env: { ...env, DSH_SWITCH_URL: String(url ?? '') },
+        detached: true,
+        stdio: ['ignore', out, out],
+        windowsHide: true,
+      },
+    )
+    child.unref?.()
     return { pid: child.pid }
   } finally {
     if (typeof out === 'number') fs.closeSync(out)

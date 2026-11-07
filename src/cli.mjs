@@ -44,6 +44,16 @@ export function statusLine(info = {}) {
   return `当前：${current}${port}${url}`
 }
 
+/**
+ * The web shell always starts on 3080 when it can. Reusing the desktop host's
+ * random port would change the browser origin, which drops the web app's
+ * storage and re-shows its first-run notice.
+ */
+export function preferredPortFor(target, state) {
+  if (target === 'web') return 3080
+  return state?.port ?? 3080
+}
+
 /** The no-argument menu. */
 export function renderMenu() {
   return [
@@ -138,12 +148,13 @@ export async function run(argv = process.argv.slice(2), overrides = {}) {
     return result.killed.length > 0 ? 0 : 1
   }
 
-  const preferredPort = state?.port ?? 3080
+  const preferredPort = preferredPortFor(resolved, state)
   const busyPort = await currentHostPort({ paths, state })
 
   await switchWithConsent(resolved, {
     paths, force, log: write,
     port: preferredPort,
+    relayPid: state?.relayPid,
     pickPort: () => reservePort(preferredPort),
     prepare: async () => write('预检通过'),
     busyProbe: async () => (busyPort ? fetchBusy({ port: busyPort }) : null),

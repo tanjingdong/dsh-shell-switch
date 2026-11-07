@@ -109,18 +109,30 @@ export async function waitForClient({
   )
 }
 
-function defaultSpawnShell(paths) {
-  const child = spawn(paths.exe, [], { detached: true, stdio: 'ignore', windowsHide: false })
-  child.unref()
-  return child.pid
+/**
+ * Start the Electron window. `ELECTRON_RUN_AS_NODE` is stripped: when a web
+ * host spawned the launcher it inherits that flag, and passing it on makes the
+ * app start as node, print nothing, and exit — no window, no host.
+ */
+export function spawnShell({ paths, spawnImpl = spawn, env = process.env } = {}) {
+  const clean = { ...env }
+  delete clean.ELECTRON_RUN_AS_NODE
+  const child = spawnImpl(paths.exe, [], {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: false,
+    env: clean,
+  })
+  child.unref?.()
+  return child
 }
 
 /**
  * Start the desktop client and only report success once its host is listening.
  * A window that never comes up is a failure, not a success.
  */
-export async function startClient({ paths, spawnShell = defaultSpawnShell, wait = waitForClient }) {
-  const shellPid = spawnShell(paths)
+export async function startClient({ paths, spawnShell: spawnImpl = spawnShell, wait = waitForClient }) {
+  const shellPid = spawnImpl({ paths }).pid
   const ready = await wait({ paths })
   return { shellPid, pid: ready.pid, port: ready.port }
 }
@@ -133,7 +145,7 @@ export async function switchTo(target, deps) {
   const {
     paths, force = false, log = () => {}, list = listProcesses, kill = killTree,
     prepare = async () => {}, startWeb, startClient, busyProbe = fetchBusy, port,
-    pickPort,
+    pickPort, relayPid,
   } = deps
 
   const current = await detectCurrent({ paths, list })
@@ -150,6 +162,11 @@ export async function switchTo(target, deps) {
       throw new LauncherError('busy-unconfirmed', '无法确认当前是否空闲（状态接口不可用）；确认后加 --force')
     }
     await stopShell({ current, paths, list, kill })
+    if (relayPid) {
+      // The relay of the shell we are leaving would keep the LAN ports bound
+      // to a dead port; it holds no user data, so there is nothing to wait for.
+      await kill(relayPid, { force: true, timeoutMs: 0, tree: false }).catch(() => {})
+    }
   }
 
   let lastError

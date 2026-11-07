@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseArgs, renderMenu, statusLine, stopNotice, switchWithConsent } from '../src/cli.mjs'
+import { parseArgs, preferredPortFor, renderMenu, statusLine, stopNotice, switchWithConsent } from '../src/cli.mjs'
 
 test('parseArgs defaults to menu and accepts --force and --now', () => {
   assert.deepEqual(parseArgs([]), { command: 'menu', force: false, now: false })
@@ -23,6 +23,14 @@ test('renderMenu lists the four choices', () => {
   assert.match(menu, /2\).*Web/)
   assert.match(menu, /3\).*状态/)
   assert.match(menu, /4\).*停止/)
+})
+
+test('the web shell always prefers the stable 3080 port', () => {
+  // Reusing the desktop host's random port changes the browser origin, which
+  // drops the web app's storage and re-shows its first-run notice.
+  assert.equal(preferredPortFor('web', { port: 14730 }), 3080)
+  assert.equal(preferredPortFor('client', { port: 14730 }), 14730)
+  assert.equal(preferredPortFor('client', null), 3080)
 })
 
 test('statusLine prints the token url so it can be copied later', () => {
