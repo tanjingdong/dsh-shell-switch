@@ -128,7 +128,7 @@ test('the row config page renders the three channels and the webhook fields', ()
     .find((entry) => entry.name === 'plugins.row.config')
   const tree = expand(row.render({ view: 'page' }))
   const words = texts(tree)
-  for (const expected of ['复制到剪贴板', '弹窗', '发送到网络', 'API 地址', 'JSON 模板', '保存', '发送测试', '创建桌面快捷方式']) {
+  for (const expected of ['打开本地浏览器', '复制到剪贴板', '弹窗', '发送到网络', 'API 地址', 'JSON 模板', '保存', '发送测试', '创建桌面快捷方式']) {
     assert.ok(words.some((word) => word.includes(expected)), `missing ${expected}: ${JSON.stringify(words)}`)
   }
   assert.ok(words.some((word) => word.includes('{url}')), 'placeholder help missing')

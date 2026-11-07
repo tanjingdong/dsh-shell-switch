@@ -2,7 +2,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 
 export const DEFAULT_REPORT_CONFIG = {
-  report: { clipboard: true, dialog: true, webhook: false },
+  report: { browser: true, clipboard: true, dialog: true, webhook: false },
   webhook: { url: '', template: '{"text":"DSH 外壳已切换到 {target}：{url}"}' },
   network: {
     // No machine-specific default: which interfaces exist is per-machine and
@@ -45,6 +45,7 @@ export function normalizeReportConfig(raw) {
   const network = source.network && typeof source.network === 'object' ? source.network : {}
   return {
     report: {
+      browser: report.browser !== false,
       clipboard: report.clipboard !== false,
       dialog: report.dialog !== false,
       webhook: report.webhook === true,

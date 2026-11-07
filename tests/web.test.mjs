@@ -98,9 +98,8 @@ test('waitForToken gives up on a log that never carries a token', async () => {
   )
 })
 
-test('startWeb records the pid before waiting, then relays and opens the browser', async () => {
+test('startWeb records the pid before waiting, then relays (the report opens the browser)', async () => {
   const order = []
-  let opened = null
   let relayArgs = null
   let spawnOptions = null
   const child = fakeChild()
@@ -113,16 +112,14 @@ test('startWeb records the pid before waiting, then relays and opens the browser
     wait: async () => { order.push('wait'); return true },
     readLog: readLogWith(OK_LOG),
     spawnRelay: async (options) => { relayArgs = options; order.push('relay'); return { pid: 4321 } },
-    openBrowser: (url) => { opened = url; order.push('open') },
   })
   assert.equal(result.url, 'http://127.0.0.1:3080/?token=abc')
-  assert.equal(opened, result.url)
   assert.equal(result.pid, 123)
   assert.equal(result.relayPid, 4321)
   assert.equal(relayArgs.targetPort, 3080)
   assert.deepEqual(relayArgs.addresses, ['1.2.3.4'])
   assert.match(String(spawnOptions.logFile), /web-host-3080\.log$/)
-  assert.deepEqual(order, ['spawn:123', 'wait', 'relay', 'open'])
+  assert.deepEqual(order, ['spawn:123', 'wait', 'relay'])
 })
 
 test('startWeb kills the spawned host when the token url never arrives', async () => {
@@ -161,8 +158,8 @@ test('startWeb kills the host and the relay when the relay cannot start', async 
   assert.deepEqual(killed, [[123, { force: true }]])
 })
 
-test('startWeb hands the token url to the notifier after opening it', async () => {
-  const order = []
+test('startWeb hands the token url to the notifier', async () => {
+  const notified = []
   await startWeb({
     paths: { cliJs: 'c', exe: 'e' },
     port: 3080,
@@ -171,10 +168,9 @@ test('startWeb hands the token url to the notifier after opening it', async () =
     wait: async () => true,
     readLog: readLogWith(OK_LOG),
     spawnRelay: async () => ({ pid: 1 }),
-    openBrowser: () => order.push('open'),
-    notifyUrl: ({ url }) => { order.push(`notify:${url}`) },
+    notifyUrl: ({ url }) => notified.push(url),
   })
-  assert.deepEqual(order, ['open', 'notify:http://127.0.0.1:3080/?token=abc'])
+  assert.deepEqual(notified, ['http://127.0.0.1:3080/?token=abc'])
 })
 
 test('a failing url dialog never tears down a host that is already up', async () => {

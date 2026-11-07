@@ -32,7 +32,7 @@ window.__ModuleLoader__.load({
     const noteStyle = { color: MUTED, fontSize: 12 };
 
     const DEFAULT_CONFIG = {
-      report: { clipboard: true, dialog: true, webhook: false },
+      report: { browser: true, clipboard: true, dialog: true, webhook: false },
       webhook: { url: "", template: '{"text":"DSH 外壳已切换到 {target}：{url}"}' },
       network: {
         addresses: [],
@@ -180,6 +180,9 @@ window.__ModuleLoader__.load({
         h("div", { style: sectionStyle },
           h("p", { style: sectionTitleStyle }, "切换成功后的上报"),
           h("p", { style: helpStyle }, "每个通道独立执行；某个通道失败只写日志，不影响切换本身。"),
+          h("label", { style: checkStyle },
+            h("input", { type: "checkbox", checked: model.report.browser === true, onChange: (e) => setReport("browser", e.target.checked) }),
+            "打开本地浏览器（带 token 的地址）"),
           h("label", { style: checkStyle },
             h("input", { type: "checkbox", checked: model.report.clipboard === true, onChange: (e) => setReport("clipboard", e.target.checked) }),
             "复制到剪贴板（带 token 的地址）"),

@@ -4,17 +4,46 @@ import { buildWebhookBody, reportSwitch, sendWebhook } from '../src/report.mjs'
 import { normalizeReportConfig } from '../src/report-config.mjs'
 
 const base = normalizeReportConfig({
-  report: { clipboard: true, dialog: true, webhook: true },
+  report: { browser: true, clipboard: true, dialog: true, webhook: true },
   webhook: { url: 'http://example.test/hook', template: '{"text":"DSH 已切换到 {target}：{url}"}' },
 })
-const onlyClipboard = normalizeReportConfig({ report: { clipboard: true, dialog: false, webhook: false } })
+const onlyClipboard = normalizeReportConfig({ report: { browser: false, clipboard: true, dialog: false, webhook: false } })
 const info = { target: 'web', port: 3080, url: 'http://h/?token=t', token: 't', time: 'T' }
+
+test('the browser opens only when its switch is on and there is a url', async () => {
+  const calls = []
+  await reportSwitch({
+    config: base, info,
+    open: async () => calls.push('open'),
+    copy: async () => calls.push('copy'),
+    dialog: async () => calls.push('dialog'),
+    send: async () => calls.push('send'),
+  })
+  assert.equal(calls[0], 'open', 'the browser opens before the other channels')
+
+  const noBrowser = []
+  await reportSwitch({
+    config: normalizeReportConfig({ report: { browser: false, clipboard: false, dialog: false, webhook: false } }),
+    info,
+    open: async () => noBrowser.push('open'),
+  })
+  assert.deepEqual(noBrowser, [])
+
+  const noUrl = []
+  await reportSwitch({
+    config: normalizeReportConfig({ report: { browser: true, clipboard: false, dialog: false, webhook: false } }),
+    info: { target: 'client', port: 4162 },
+    open: async () => noUrl.push('open'),
+  })
+  assert.deepEqual(noUrl, [])
+})
 
 test('each channel runs only when its switch is on', async () => {
   const calls = []
   await reportSwitch({
     config: onlyClipboard,
     info,
+    open: async () => calls.push('open'),
     copy: async () => calls.push('copy'),
     dialog: async () => calls.push('dialog'),
     send: async () => calls.push('send'),
@@ -27,11 +56,12 @@ test('a failing channel does not stop the others', async () => {
   const result = await reportSwitch({
     config: base,
     info,
+    open: async () => calls.push('open'),
     copy: async () => { throw new Error('boom') },
     dialog: async () => calls.push('dialog'),
     send: async () => calls.push('send'),
   })
-  assert.deepEqual(calls, ['dialog', 'send'])
+  assert.deepEqual(calls, ['open', 'dialog', 'send'])
   assert.equal(result.clipboard, 'failed')
 })
 

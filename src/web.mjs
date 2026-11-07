@@ -105,7 +105,8 @@ function defaultSpawnRelay({ targetPort, listenPort, addresses }) {
   return { pid: child.pid }
 }
 
-function defaultOpen(url) {
+/** Open the tokenised url in the default browser; a reporting channel calls it. */
+export function openBrowser(url) {
   spawn('cmd', ['/c', 'start', '', url], { windowsHide: true, detached: true, stdio: 'ignore' }).unref()
 }
 
@@ -168,7 +169,7 @@ export function showUrlDialog({ url, spawnProcess = spawn, env = process.env, lo
  */
 export async function startWeb({
   paths, port, addresses = [], logFile, spawnProcess = spawnWebHost, wait = waitReady,
-  readLog, spawnRelay = defaultSpawnRelay, openBrowser = defaultOpen, kill = killTree,
+  readLog, spawnRelay = defaultSpawnRelay, kill = killTree,
   onSpawn = async () => {}, notifyUrl = async () => {}, tokenTimeoutMs = 15000, log = () => {},
 }) {
   const webLog = logFile ?? path.join(paths.logDir ?? os.tmpdir(), `web-host-${port}.log`)
@@ -191,7 +192,6 @@ export async function startWeb({
       relayPid = (await spawnRelay({ targetPort: port, listenPort: port, addresses, log }))?.pid ?? null
     }
     log(`[web] 主机日志：${webLog}`)
-    openBrowser(url)
     try {
       await notifyUrl({ url, relayPid, logFile: webLog })
     } catch (error) {

@@ -38,10 +38,21 @@ export async function sendWebhook({ url, body, fetchImpl = globalThis.fetch, tim
  * recorded and logged, and none of them can fail the switch itself.
  */
 export async function reportSwitch({
-  config, info = {}, copy, dialog, send, log = () => {},
+  config, info = {}, open, copy, dialog, send, log = () => {},
 } = {}) {
-  const result = { clipboard: 'skipped', dialog: 'skipped', webhook: 'skipped' }
+  const result = { browser: 'skipped', clipboard: 'skipped', dialog: 'skipped', webhook: 'skipped' }
   const url = info?.url ?? ''
+
+  // The browser goes first so the page is up while the other channels report.
+  if (config?.report?.browser === true && url) {
+    try {
+      await open({ url })
+      result.browser = 'sent'
+    } catch (error) {
+      result.browser = 'failed'
+      log(`[report] 打开浏览器失败：${error?.message ?? error}`)
+    }
+  }
 
   if (config?.report?.clipboard === true && url) {
     try {

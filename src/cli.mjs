@@ -8,7 +8,7 @@ import { readState, writeState } from './state.mjs'
 import { fetchBusy, currentHostPort, detectCurrent, startClient, status, stopEverything, switchTo } from './launcher.mjs'
 import { reportSwitch, sendWebhook } from './report.mjs'
 import { readReportConfig, reportConfigFile } from './report-config.mjs'
-import { copyToClipboard, showUrlDialog, startWeb } from './web.mjs'
+import { copyToClipboard, openBrowser, showUrlDialog, startWeb } from './web.mjs'
 
 const COMMANDS = ['menu', 'client', 'web', 'status', 'stop']
 
@@ -89,6 +89,7 @@ export async function runReport({ paths, info, deps = {} } = {}) {
     return await report({
       config,
       info,
+      open: deps.open ?? (({ url }) => openBrowser(url)),
       copy: deps.copy ?? (({ url }) => copyToClipboard({
         url, logFile: path.join(paths.logDir, 'url-clipboard.log'),
       })),

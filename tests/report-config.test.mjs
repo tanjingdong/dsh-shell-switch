@@ -22,7 +22,7 @@ test('normalizeReportConfig keeps known keys and ignores junk', () => {
     extra: true,
   })
   assert.deepEqual(config, {
-    report: { clipboard: false, dialog: true, webhook: true },
+    report: { browser: true, clipboard: false, dialog: true, webhook: true },
     webhook: { url: 'http://x', template: '{"a":1}' },
     network: { addresses: [], loopbackOnly: false },
   })
@@ -49,6 +49,12 @@ test('network defaults publish nothing, because interfaces are per-machine', () 
   assert.deepEqual(DEFAULT_REPORT_CONFIG.network.addresses, [])
   assert.equal(DEFAULT_REPORT_CONFIG.network.loopbackOnly, false)
   assert.deepEqual(normalizeReportConfig({}).network.addresses, [])
+})
+
+test('the browser channel is on by default and only false turns it off', () => {
+  assert.equal(DEFAULT_REPORT_CONFIG.report.browser, true)
+  assert.equal(normalizeReportConfig({}).report.browser, true)
+  assert.equal(normalizeReportConfig({ report: { browser: false } }).report.browser, false)
 })
 
 test('normalizeReportConfig trims and de-duplicates nothing, just cleans blanks', () => {

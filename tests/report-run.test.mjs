@@ -19,6 +19,7 @@ test('a successful switch reports once with the resolved config', async () => {
   assert.equal(seen.length, 1)
   assert.equal(seen[0].info.url, 'http://h/?token=t')
   assert.equal(seen[0].config.report.clipboard, true)
+  assert.equal(typeof seen[0].open, 'function')
   assert.equal(typeof seen[0].copy, 'function')
   assert.equal(typeof seen[0].dialog, 'function')
   assert.equal(typeof seen[0].send, 'function')
