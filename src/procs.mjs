@@ -1,9 +1,11 @@
 import { execFile } from 'node:child_process'
 
-const PS_QUERY = 'Get-CimInstance Win32_Process | Select-Object ProcessId,Name,CommandLine | ConvertTo-Json -Compress'
+/** PowerShell 5.1 prints in the console code page; force UTF-8 before the query. */
+export const PROCESS_QUERY = '[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false); '
+  + 'Get-CimInstance Win32_Process | Select-Object ProcessId,Name,CommandLine | ConvertTo-Json -Compress'
 
-/** Run PowerShell and return its stdout. */
-export function defaultRun(args = ['-NoProfile', '-Command', PS_QUERY]) {
+/** Run PowerShell and return its stdout plus any failure. */
+export function defaultRun(args = ['-NoProfile', '-Command', PROCESS_QUERY]) {
   return new Promise((resolve) => {
     execFile('powershell.exe', args, { windowsHide: true, maxBuffer: 16 * 1024 * 1024 }, (error, stdout) => {
       resolve({ stdout: stdout ?? '', error })
@@ -11,11 +13,14 @@ export function defaultRun(args = ['-NoProfile', '-Command', PS_QUERY]) {
   })
 }
 
-/** Every process as { pid, name, commandLine }. Empty output yields []. */
+/** Every process as { pid, name, commandLine }. A read failure throws. */
 export async function listProcesses(run = defaultRun) {
-  const { stdout } = await run()
+  const { stdout, error } = await run()
   const text = (stdout ?? '').replace(/^\uFEFF/, '').trim()
-  if (text === '') return []
+  if (text === '') {
+    if (error) throw new Error(`无法读取进程列表：${error.message ?? error}`)
+    return []
+  }
   const parsed = JSON.parse(text)
   const rows = Array.isArray(parsed) ? parsed : [parsed]
   return rows.map((row) => ({
@@ -25,15 +30,17 @@ export async function listProcesses(run = defaultRun) {
   }))
 }
 
+const normalize = (value) => String(value ?? '').replace(/\//g, '\\').toLowerCase()
+
 /** The Electron app's own host: desktop profile, dsh-desktop-host entry. */
 export function isDesktopHost(process, paths) {
-  const cmd = String(process.commandLine ?? '').toLowerCase()
-  return cmd.includes('dsh-desktop-host') && cmd.includes(String(paths.desktopProfile).toLowerCase())
+  const cmd = normalize(process.commandLine)
+  return cmd.includes('dsh-desktop-host') && cmd.includes(normalize(paths.desktopProfile))
 }
 
 /** A CLI web host serving the web profile (explicit or default form). */
 export function isWebHost(process, paths) {
-  const cmd = String(process.commandLine ?? '').toLowerCase()
+  const cmd = normalize(process.commandLine)
   if (!cmd.includes('cli.js')) return false
   if (isDesktopHost(process, paths)) return false
   return /--profile\s+web\b/.test(cmd) || /cli\.js"?\s+web\b/.test(cmd)
@@ -47,33 +54,37 @@ function defaultKill(pid, mode) {
   const args = ['/PID', String(pid), '/T']
   if (mode === 'force') args.push('/F')
   return new Promise((resolve) => {
-    execFile('taskkill', args, { windowsHide: true }, () => resolve())
+    execFile('taskkill', args, { windowsHide: true }, (error) => resolve({ error }))
   })
 }
 
 /**
  * Ask the tree to exit, wait, then force only when allowed.
- * Never reports forced unless the force signal was actually sent.
+ * Truthful by construction: the result says whether the process is gone.
  */
 export async function killTree(pid, {
   force = false, timeoutMs = 10000, list = listProcesses, kill = defaultKill,
 } = {}) {
-  await kill(pid, 'graceful')
-  const deadline = Date.now() + Math.max(0, timeoutMs)
   const alive = async () => {
     try {
-      return (await list()).some((p) => p.pid === pid)
+      return (await list()).some((process) => process.pid === pid)
     } catch {
       return true
     }
   }
+
+  await kill(pid, 'graceful')
+  const deadline = Date.now() + Math.max(0, timeoutMs)
   while (Date.now() < deadline) {
     if (!(await alive())) return { killed: true, forced: false }
     await sleep(200)
   }
   if (!(await alive())) return { killed: true, forced: false }
   if (!force) return { killed: false, forced: false }
-  await kill(pid, 'force')
+
+  const forced = await kill(pid, 'force')
   await sleep(300)
+  const stillAlive = await alive()
+  if (stillAlive) throw new Error(`无法结束进程 ${pid}${forced?.error ? `：${forced.error.message}` : ''}`)
   return { killed: true, forced: true }
 }
