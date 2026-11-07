@@ -1,2 +1,4 @@
 .superpowers/
 node_modules/
+_*.txt
+debug.mjs
