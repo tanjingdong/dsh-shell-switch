@@ -31,14 +31,18 @@ export function parseRelayArgs(argv = []) {
 
 /**
  * Publish the target port on extra interfaces by relaying TCP both ways.
- * A missing address (VPN down) only loses that entry point.
+ * A missing address (VPN down) only loses that entry point, and failed
+ * addresses are retried later instead of being lost for the session.
  */
 export async function createRelay({
   targetHost = '127.0.0.1', targetPort, listenPort = targetPort, addresses = [], log = () => {},
+  retryIntervalMs = 30000,
+  schedule = (fn, ms) => setInterval(fn, ms),
+  cancel = (timer) => clearInterval(timer),
 } = {}) {
   const servers = []
   const sockets = new Set()
-  const results = []
+  const statusOf = new Map()
 
   const publish = (address) => new Promise((resolve) => {
     const server = net.createServer((client) => {
@@ -54,14 +58,14 @@ export async function createRelay({
     })
     server.once('error', (error) => {
       const status = error?.code ?? 'error'
+      statusOf.set(address, { address, status })
       log(`[relay] ${address} 不可用：${status}`)
-      results.push({ address, status })
       resolve()
     })
     server.listen(listenPort, address, () => {
       servers.push(server)
       const port = server.address().port
-      results.push({ address, status: 'ok', port })
+      statusOf.set(address, { address, status: 'ok', port })
       log(`[relay] ${address}:${port} → ${targetHost}:${targetPort}`)
       resolve()
     })
@@ -69,9 +73,26 @@ export async function createRelay({
 
   await Promise.all(addresses.map(publish))
 
+  const snapshot = () => addresses.map((address) => (
+    statusOf.get(address) ?? { address, status: 'pending' }
+  ))
+
+  const retry = async () => {
+    const failed = addresses.filter((address) => statusOf.get(address)?.status !== 'ok')
+    await Promise.all(failed.map(publish))
+    return snapshot()
+  }
+
+  const timer = retryIntervalMs > 0 && addresses.length > 0
+    ? schedule(() => { retry().catch(() => {}) }, retryIntervalMs)
+    : null
+  timer?.unref?.()
+
   return {
-    results,
+    retry,
+    get results() { return snapshot() },
     async close() {
+      if (timer) cancel(timer)
       for (const server of servers) server.close()
       for (const socket of sockets) socket.destroy()
       sockets.clear()

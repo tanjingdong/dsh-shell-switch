@@ -50,3 +50,48 @@ test('the relay cli hands the parsed options to the factory', async () => {
   assert.deepEqual(seen.addresses, ['1.2.3.4'])
   assert.ok(relay)
 })
+
+test('the relay retries an address that was not available at start', async () => {
+  const echo = net.createServer((s) => s.pipe(s)).listen(0, '127.0.0.1')
+  await once(echo, 'listening')
+  const blocker = net.createServer().listen(0, '127.0.0.1')
+  await once(blocker, 'listening')
+  const blockedPort = blocker.address().port
+  let relay = null
+  try {
+    relay = await createRelay({
+      targetPort: echo.address().port,
+      addresses: ['127.0.0.1'],
+      listenPort: blockedPort,
+      retryIntervalMs: 0,
+    })
+    assert.notEqual(relay.results[0].status, 'ok')
+    blocker.close()
+    await once(blocker, 'close')
+    await relay.retry()
+    assert.equal(relay.results[0].status, 'ok')
+  } finally {
+    await relay?.close()
+    echo.close()
+    await once(echo, 'close')
+  }
+})
+
+test('the relay retry timer is unref-ed so it never holds the process open', async () => {
+  let unrefed = false
+  let delay = null
+  let relay = null
+  try {
+    relay = await createRelay({
+      targetPort: 1,
+      addresses: ['127.0.0.1'],
+      listenPort: 0,
+      retryIntervalMs: 5000,
+      schedule: (fn, ms) => { delay = ms; return { unref: () => { unrefed = true } } },
+    })
+    assert.equal(delay, 5000)
+    assert.equal(unrefed, true)
+  } finally {
+    await relay?.close()
+  }
+})

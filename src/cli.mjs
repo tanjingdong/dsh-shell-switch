@@ -4,26 +4,35 @@ import { createLogger } from './log.mjs'
 import { assertInstalled, resolvePaths } from './paths.mjs'
 import { reservePort } from './ports.mjs'
 import { readState, writeState } from './state.mjs'
-import { fetchBusy, currentHostPort, startClient, status, stopEverything, switchTo } from './launcher.mjs'
+import { fetchBusy, currentHostPort, detectCurrent, startClient, status, stopEverything, switchTo } from './launcher.mjs'
 import { startWeb } from './web.mjs'
 
 const COMMANDS = ['menu', 'client', 'web', 'status', 'stop']
 
 const LAN_ADDRESSES = ['192.168.0.106', '10.147.20.214', '100.100.0.3']
 
-/** Parse argv into a command plus the force flag. */
+/** Parse argv into a command plus the force and immediate flags. */
 export function parseArgs(argv = []) {
   let force = false
+  let now = false
   const positional = []
   for (const arg of argv) {
     if (arg === '--force') force = true
+    else if (arg === '--now') now = true
     else positional.push(arg)
   }
   const command = positional[0] ?? 'menu'
   if (!COMMANDS.includes(command)) {
     throw new LauncherError('bad-args', `未知命令：${command}。可用：${COMMANDS.join(' / ')}`)
   }
-  return { command, force }
+  return { command, force, now }
+}
+
+/** What to warn before stopping the desktop client, if anything. */
+export function stopNotice(current, now = false) {
+  if (current !== 'client') return null
+  if (now) return '正在立即结束桌面客户端：未保存的内容会丢失'
+  return '正在关闭桌面客户端：未保存的内容可能丢失；要立即结束请加 --now'
 }
 
 /** The no-argument menu. */
@@ -84,7 +93,7 @@ export async function switchWithConsent(target, deps, {
 
 /** Run one command and return the process exit code. */
 export async function run(argv = process.argv.slice(2), overrides = {}) {
-  const { command, force } = overrides.parsed ?? parseArgs(argv)
+  const { command, force, now } = overrides.parsed ?? parseArgs(argv)
   const paths = overrides.paths ?? resolvePaths()
   assertInstalled(paths)
   const logger = overrides.logger ?? createLogger({ paths })
@@ -99,13 +108,18 @@ export async function run(argv = process.argv.slice(2), overrides = {}) {
   }
 
   if (resolved === 'stop') {
-    const result = await stopEverything({ paths, state })
-    if (!result.current) {
+    const current = await detectCurrent({ paths })
+    if (!current) {
       write('没有外壳在运行')
       return 0
     }
+    const notice = stopNotice(current, now)
+    if (notice) write(notice)
+    const result = await stopEverything({
+      paths, state, current, timeoutMs: now ? 0 : 10000,
+    })
     await writeState(paths.stateFile, {
-      ...state, mode: result.current, stoppedAt: new Date().toISOString(),
+      ...state, mode: current, stoppedAt: new Date().toISOString(),
     })
     write(result.killed.length > 0 ? '已停止' : '停止失败，进程仍然存在')
     return result.killed.length > 0 ? 0 : 1

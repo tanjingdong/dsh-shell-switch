@@ -10,7 +10,18 @@ function sleep(ms) {
 
 /** Which shell currently owns the desktop profile, if any. */
 export async function detectCurrent({ paths, list = listProcesses } = {}) {
-  const processes = await list()
+  let processes
+  try {
+    processes = await list()
+  } catch (error) {
+    // A failed query is not "nothing is running"; switching on that guess
+    // would start a second host on top of a live one.
+    throw new LauncherError(
+      'process-query-failed',
+      `无法读取进程列表，无法判断当前外壳：${error?.message ?? error}。`
+      + '可在任务管理器里确认后重试，或用 --force 明确指定目标',
+    )
+  }
   if (processes.some((process) => isDesktopHost(process, paths))) return 'client'
   if (processes.some((process) => isWebHost(process, paths))) return 'web'
   return null
@@ -38,7 +49,9 @@ export async function fetchBusy({ port, fetchImpl = globalThis.fetch, timeoutMs 
  * an Electron window, so both must go: killing only the host leaves a window
  * stuck on the fatal-recovery dialog and blocks the next client start.
  */
-export async function stopShell({ current, paths, list = listProcesses, kill = killTree }) {
+export async function stopShell({
+  current, paths, list = listProcesses, kill = killTree, timeoutMs = 10000,
+}) {
   const processes = await list()
   const targets = current === 'client'
     ? [
@@ -48,7 +61,7 @@ export async function stopShell({ current, paths, list = listProcesses, kill = k
     : processes.filter((process) => isWebHost(process, paths))
   const killed = []
   for (const target of targets) {
-    await kill(target.pid, { force: true })
+    await kill(target.pid, { force: true, timeoutMs })
     killed.push(target.pid)
   }
   return killed
@@ -145,15 +158,18 @@ export async function switchTo(target, deps) {
  * recorded. The process list is the source of truth: a client started before
  * pid recording existed still gets stopped.
  */
-export async function stopEverything({ paths, state, list = listProcesses, kill = killTree }) {
-  const current = await detectCurrent({ paths, list })
-  if (!current) return { current: null, killed: [] }
-  const killed = await stopShell({ current, paths, list, kill })
+export async function stopEverything({
+  paths, state, current, list = listProcesses, kill = killTree, timeoutMs = 10000,
+}) {
+  const running = current ?? await detectCurrent({ paths, list })
+  if (!running) return { current: null, killed: [] }
+  const killed = await stopShell({ current: running, paths, list, kill, timeoutMs })
   if (state?.relayPid && !killed.includes(state.relayPid)) {
-    await kill(state.relayPid, { force: true }).catch(() => {})
+    // The relay holds no user data; there is nothing to wait for.
+    await kill(state.relayPid, { force: true, timeoutMs: 0 }).catch(() => {})
     killed.push(state.relayPid)
   }
-  return { current, killed }
+  return { current: running, killed }
 }
 
 /**

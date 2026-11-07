@@ -189,6 +189,34 @@ test('currentHostPort prefers the recorded port and otherwise asks the host pid'
   )
 })
 
+test('detectCurrent refuses to guess when the process list cannot be read', async () => {
+  await assert.rejects(
+    detectCurrent({ paths: clientPaths, list: async () => { throw new Error('powershell blocked') } }),
+    (error) => error.code === 'process-query-failed',
+  )
+})
+
+test('switchTo stops instead of starting when processes cannot be listed', async () => {
+  let started = false
+  await assert.rejects(switchTo('web', {
+    paths: clientPaths,
+    list: async () => { throw new Error('powershell blocked') },
+    startWeb: async () => { started = true },
+  }), (error) => error.code === 'process-query-failed')
+  assert.equal(started, false)
+})
+
+test('switchTo does nothing when the target shell already runs', async () => {
+  let started = false
+  const result = await switchTo('web', {
+    paths: clientPaths,
+    list: async () => [{ pid: 20, commandLine: 'x\\cli.js web --host 127.0.0.1 --port 3080' }],
+    startWeb: async () => { started = true },
+  })
+  assert.deepEqual(result, { switched: false, current: 'web' })
+  assert.equal(started, false)
+})
+
 test('detectCurrent reports the shell that owns the profile', async () => {
   const paths = { desktopProfile: 'p\\desktop', webProfile: 'p\\web' }
   assert.equal(await detectCurrent({ paths, list: async () => [] }), null)

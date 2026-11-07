@@ -121,3 +121,21 @@ test('stopWeb kills the relay process before the host', async () => {
   assert.deepEqual(killed.map(([pid]) => pid), [4321, 123])
   assert.deepEqual(killed[0][1], { force: true })
 })
+
+test('a dead relay address only loses that entry point', async () => {
+  const child = fakeChild(['dsh web: http://127.0.0.1:3080/?token=abc'])
+  const result = await startWeb({
+    paths: { cliJs: 'c', exe: 'e' },
+    port: 3080,
+    addresses: ['203.0.113.9'],
+    spawnProcess: () => child,
+    wait: async () => true,
+    spawnRelay: async () => ({
+      pid: 4321,
+      results: [{ address: '203.0.113.9', status: 'ENOTFOUND' }],
+    }),
+    openBrowser: () => {},
+  })
+  assert.equal(result.port, 3080)
+  assert.equal(result.relayPid, 4321)
+})

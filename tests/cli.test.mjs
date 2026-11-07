@@ -1,12 +1,20 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseArgs, renderMenu, switchWithConsent } from '../src/cli.mjs'
+import { parseArgs, renderMenu, stopNotice, switchWithConsent } from '../src/cli.mjs'
 
-test('parseArgs defaults to menu and accepts --force', () => {
-  assert.deepEqual(parseArgs([]), { command: 'menu', force: false })
-  assert.deepEqual(parseArgs(['web', '--force']), { command: 'web', force: true })
-  assert.deepEqual(parseArgs(['client']), { command: 'client', force: false })
+test('parseArgs defaults to menu and accepts --force and --now', () => {
+  assert.deepEqual(parseArgs([]), { command: 'menu', force: false, now: false })
+  assert.deepEqual(parseArgs(['web', '--force']), { command: 'web', force: true, now: false })
+  assert.deepEqual(parseArgs(['client']), { command: 'client', force: false, now: false })
+  assert.deepEqual(parseArgs(['stop', '--now']), { command: 'stop', force: false, now: true })
   assert.throws(() => parseArgs(['nope']), (e) => e.code === 'bad-args')
+})
+
+test('stopNotice warns about unsaved work and offers the immediate mode', () => {
+  assert.equal(stopNotice('web', false), null)
+  assert.match(stopNotice('client', false), /未保存/)
+  assert.match(stopNotice('client', false), /--now/)
+  assert.match(stopNotice('client', true), /立即/)
 })
 
 test('renderMenu lists the four choices', () => {
