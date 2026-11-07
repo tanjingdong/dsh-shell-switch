@@ -9,16 +9,23 @@ window.__ModuleLoader__.load({
     const h = react.createElement;
     const useState = react.useState;
 
+    const INK = "#f2f2f2";
+    const MUTED = "#c9c9c9";
+    const SURFACE = "#1f1f1f";
+    const EDGE = "#4a4a4a";
+
     const button = {
-      background: "transparent", border: "1px solid currentColor", borderRadius: 6,
-      color: "inherit", cursor: "pointer", fontSize: 12, padding: "4px 8px",
+      background: "transparent", border: `1px solid ${EDGE}`, borderRadius: 6,
+      color: INK, cursor: "pointer", fontSize: 12, padding: "4px 8px",
     };
     const panel = {
-      background: "var(--dsh-surface, #1f1f1f)", border: "1px solid #444", borderRadius: 8,
-      bottom: 48, color: "inherit", display: "flex", flexDirection: "column", gap: 8,
+      background: SURFACE, border: `1px solid ${EDGE}`, borderRadius: 8,
+      bottom: 48, boxShadow: "0 8px 24px rgba(0, 0, 0, 0.45)", color: INK,
+      display: "flex", flexDirection: "column", gap: 8,
       left: 12, padding: 12, position: "fixed", width: 250, zIndex: 1000,
     };
     const choice = { ...button, textAlign: "left", padding: "8px 10px" };
+    const noteStyle = { color: MUTED, fontSize: 12 };
 
     async function readState() {
       const response = await fetch("/dsh-switch/state");
@@ -73,7 +80,7 @@ window.__ModuleLoader__.load({
         phase === "pick" && h("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
           h("button", { style: choice, onClick: () => pick("client") }, "桌面客户端"),
           h("button", { style: choice, onClick: () => pick("web") }, "浏览器 Web")),
-        note !== "" && h("div", { style: { fontSize: 12, opacity: 0.9 } }, note),
+        note !== "" && h("div", { style: noteStyle }, note),
         (phase === "warn" || phase === "confirm") && h("button", { style: choice, onClick: go }, "仍然切换"),
         phase === "error" && h("button", { style: choice, onClick: () => setPhase("pick") }, "重试"),
         phase === "switching" && h("div", { style: { fontSize: 12 } }, "请稍候，窗口即将关闭…"),
