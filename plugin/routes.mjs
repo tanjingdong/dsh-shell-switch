@@ -22,6 +22,30 @@ function isLoopbackHost(host) {
 }
 
 /**
+ * Requests relayed from a LAN address carry that private IP as Host. They are
+ * not loopback, but they are this machine's own publishing addresses, so the
+ * settings page must still work there. Public host names stay refused: that is
+ * the DNS-rebinding case the Host check exists for.
+ */
+function isPrivateHost(host) {
+  const name = String(host ?? '').trim().replace(/:\d+$/, '').replace(/^\[|\]$/g, '')
+  const match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(name)
+  if (!match) return false
+  const [a, b] = [Number(match[1]), Number(match[2])]
+  if (a === 10) return true
+  if (a === 172 && b >= 16 && b <= 31) return true
+  if (a === 192 && b === 168) return true
+  if (a === 169 && b === 254) return true
+  if (a === 100 && b >= 64 && b <= 127) return true
+  if (a === 127) return true
+  return false
+}
+
+function isAllowedHost(host) {
+  return isLoopbackHost(host) || isPrivateHost(host)
+}
+
+/**
  * Two loopback-only routes: a read-only state/activity probe and a one-shot
  * handoff. Everything is caught; nothing throws into the host.
  */
@@ -80,7 +104,7 @@ export function createHandoffRoutes({
       try {
         if (!isLoopbackAddress(remote?.remoteAddress)) return json(403, { error: 'forbidden' })
         const host = headers.host ?? headers.Host
-        if (!isLoopbackHost(host)) return json(403, { error: 'forbidden' })
+        if (!isAllowedHost(host)) return json(403, { error: 'forbidden' })
 
         if (method === 'GET' && url === '/dsh-switch/state') {
           nonce = random()

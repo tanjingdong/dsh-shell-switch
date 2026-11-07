@@ -167,6 +167,17 @@ test('the page explains the network settings', () => {
   assert.ok(words.some((word) => word.includes('127.0.0.1')), 'loopback explanation missing')
 })
 
+test('the page cannot be saved before the real config has been read', () => {
+  const bundle = loadBundle({
+    fetch: async () => ({ ok: true, json: async () => ({ report: {}, webhook: {}, network: {} }) }),
+  })
+  const row = mountBundle(bundle, { firstState: false })
+    .find((entry) => entry.name === 'plugins.row.config')
+  const tree = expand(row.render({ view: 'page' }))
+  const save = find(tree, (node) => node.type === 'button' && texts(node).includes('保存'))
+  assert.equal(save.props.disabled, true)
+})
+
 test('the panel offers both shells and a close action', () => {
   const words = texts(renderEntry(loadBundle()))
   assert.ok(words.includes('切换外壳'), `panel title missing: ${JSON.stringify(words)}`)

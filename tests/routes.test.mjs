@@ -37,6 +37,16 @@ test('state treats jobs, a waiting inbox and approvals as busy', () => {
   assert.equal(busy({ agents: 0, jobs: 0, inbox: false, approvals: 0 }), false)
 })
 
+test('a LAN address is allowed while a public host name is not', () => {
+  const routes = createHandoffRoutes({ now: () => 1000, random: () => 'n1', spawnLauncher: () => 1, readActivity: () => ({ agents: 0, jobs: 0 }) })
+  for (const host of ['127.0.0.1:3080', 'localhost:3080', '192.168.0.106:3080', '10.147.20.214:3080', '100.100.0.3:3080', '172.16.5.4:3080']) {
+    assert.equal(routes.handle('GET', '/dsh-switch/state', { host }, loop).status, 200, host)
+  }
+  for (const host of ['evil.example:3080', '8.8.8.8:3080', '203.0.113.9:3080']) {
+    assert.equal(routes.handle('GET', '/dsh-switch/state', { host }, loop).status, 403, host)
+  }
+})
+
 test('state names the running shell so the panel can say "already there"', async () => {
   const routes = createHandoffRoutes({
     now: () => 1, random: () => 'n', spawnLauncher: () => 1,

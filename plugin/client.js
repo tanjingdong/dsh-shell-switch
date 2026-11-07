@@ -81,13 +81,18 @@ window.__ModuleLoader__.load({
       const [model, setModel] = useState(configCache || DEFAULT_CONFIG);
       const [notice, setNotice] = useState("");
       const [busy, setBusy] = useState(false);
+      // Nothing may be saved before the real file has been read: the form
+      // starts from the defaults, and saving those would overwrite the file.
+      const [loaded, setLoaded] = useState(configCache !== null);
 
       if (!configCache && !configLoading) {
         configLoading = true;
         fetch("/dsh-switch/report-config")
           .then((response) => (response.ok ? response.json() : Promise.reject(new Error(`读取配置失败（${response.status}）`))))
-          .then((next) => { configCache = next; setModel(next); })
-          .catch((error) => setNotice(String(error && error.message ? error.message : error)))
+          .then((next) => { configCache = next; setModel(next); setLoaded(true); })
+          .catch((error) => setNotice(
+            `${error && error.message ? error.message : error}：下面显示的是默认值、未载入，保存已禁用，避免覆盖现有配置。`,
+          ))
           .finally(() => { configLoading = false; });
       }
 
@@ -182,8 +187,9 @@ window.__ModuleLoader__.load({
           h("p", { style: helpStyle }, "勾上「只绑定回环」后完全不发布到局域网，只有本机 127.0.0.1 能访问。DSH 不允许监听 0.0.0.0，这里也不接受。")),
 
         h("div", { style: actionsStyle },
-          h("button", { style: pageButton, disabled: busy, onClick: save }, "保存"),
+          h("button", { style: pageButton, disabled: busy || !loaded, onClick: save }, "保存"),
           h("button", { style: pageButton, disabled: busy, onClick: sendTest }, "发送测试")),
+        !loaded && notice === "" && h("p", { style: helpStyle }, "正在读取配置…"),
         notice !== "" && h("p", { style: { ...helpStyle, fontWeight: 600 } }, notice));
     }
 
