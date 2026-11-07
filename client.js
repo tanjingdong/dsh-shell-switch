@@ -68,6 +68,8 @@ window.__ModuleLoader__.load({
     let configLoading = false;
     let interfacesCache = null;
     let interfacesLoading = false;
+    let healthCache;
+    let healthLoading = false;
 
     async function postJson(url, payload) {
       const response = await fetch(url, {
@@ -87,6 +89,16 @@ window.__ModuleLoader__.load({
       // starts from the defaults, and saving those would overwrite the file.
       const [loaded, setLoaded] = useState(configCache !== null);
       const [interfaces, setInterfaces] = useState(interfacesCache);
+      const [health, setHealth] = useState(healthCache);
+
+      if (healthCache === undefined && !healthLoading) {
+        healthLoading = true;
+        fetch("/dsh-switch/health")
+          .then((response) => (response.ok ? response.json() : Promise.reject(new Error(`健康检查失败（${response.status}）`))))
+          .then((body) => { healthCache = body.health ?? null; setHealth(healthCache); })
+          .catch(() => { healthCache = null; setHealth(null); })
+          .finally(() => { healthLoading = false; });
+      }
 
       if (interfacesCache === null && !interfacesLoading) {
         interfacesLoading = true;
@@ -177,6 +189,15 @@ window.__ModuleLoader__.load({
       };
 
       return h("div", { style: pageStyle },
+        health && health.warning && h("div", { style: { ...sectionStyle, borderTop: "none", paddingTop: 0 } },
+          h("p", { style: sectionTitleStyle }, "需要先建立 profile 联接"),
+          h("p", { style: helpStyle }, health.warning),
+          h("pre", {
+            style: {
+              ...controlStyle, margin: 0, overflowX: "auto", whiteSpace: "pre-wrap", wordBreak: "break-all",
+            },
+          }, health.command),
+          h("p", { style: helpStyle }, "选中上面的命令复制到 PowerShell 里执行；联接建立后这一条会消失。")),
         h("div", { style: sectionStyle },
           h("p", { style: sectionTitleStyle }, "切换成功后的上报"),
           h("p", { style: helpStyle }, "每个通道独立执行；某个通道失败只写日志，不影响切换本身。"),

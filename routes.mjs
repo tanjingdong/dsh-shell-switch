@@ -73,6 +73,7 @@ export function createHandoffRoutes({
   sendTest = null,
   readInterfaces = localInterfaces,
   createShortcut = null,
+  readHealth = null,
 } = {}) {
   let nonce = null
   let expiresAt = 0
@@ -148,6 +149,12 @@ export function createHandoffRoutes({
               return json(502, { ok: false, error: String(error?.message ?? error) })
             }
           })
+        }
+
+        if (method === 'GET' && url === '/dsh-switch/health') {
+          return respond(async () => json(200, {
+            health: typeof readHealth === 'function' ? await readHealth() : null,
+          }))
         }
 
         if (method === 'GET' && url === '/dsh-switch/interfaces') {

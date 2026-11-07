@@ -67,6 +67,25 @@ test('state omits the shell when the host cannot detect it', async () => {
   assert.equal(JSON.parse(res.body).current, undefined)
 })
 
+test('the health route reports a missing profile link with the command to fix it', async () => {
+  const routes = createHandoffRoutes({
+    now: () => 1, random: () => 'n', spawnLauncher: () => 1,
+    readHealth: async () => ({ linked: false, warning: 'web profile 还没有和 desktop 链接', command: 'node cutover.mjs' }),
+  })
+  const res = await routes.handle('GET', '/dsh-switch/health', headers, loop)
+  assert.equal(res.status, 200)
+  const body = JSON.parse(res.body)
+  assert.equal(body.health.linked, false)
+  assert.equal(body.health.command, 'node cutover.mjs')
+})
+
+test('the health route answers null when the host cannot check', async () => {
+  const routes = createHandoffRoutes({ now: () => 1, random: () => 'n', spawnLauncher: () => 1 })
+  const res = await routes.handle('GET', '/dsh-switch/health', headers, loop)
+  assert.equal(res.status, 200)
+  assert.equal(JSON.parse(res.body).health, null)
+})
+
 test('the shortcut route creates the launcher shortcut and reports its path', async () => {
   const routes = createHandoffRoutes({
     now: () => 1, random: () => 'n', spawnLauncher: () => 1,

@@ -4,6 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createLogger } from './src/log.mjs'
 import { detectCurrent } from './src/launcher.mjs'
+import { profileHealth } from './src/health.mjs'
 import { resolvePaths } from './src/paths.mjs'
 import { buildWebhookBody, sendWebhook } from './src/report.mjs'
 import { readReportConfig, reportConfigFile } from './src/report-config.mjs'
@@ -101,6 +102,7 @@ export const ROUTE_PATHS = [
   '/dsh-switch/interfaces',
   '/dsh-switch/report-test',
   '/dsh-switch/shortcut',
+  '/dsh-switch/health',
 ]
 
 /** Mount the shared handler on every route the client calls. */
@@ -152,6 +154,10 @@ export function apply(ctx) {
         return null
       }
     },
+    readHealth: () => profileHealth({
+      profilesDir: paths.profilesDir,
+      command: `node "${path.join(REPO_ROOT, 'setup', 'cutover.mjs')}"`,
+    }),
     createShortcut: () => createDesktopShortcut(shortcutSpec()),
     sendTest: async () => {
       const config = await readReportConfig(reportConfigFile(paths))

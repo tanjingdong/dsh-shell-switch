@@ -45,6 +45,7 @@ test('every route the client calls is mounted on the host web server', () => {
     '/dsh-switch/interfaces',
     '/dsh-switch/report-test',
     '/dsh-switch/shortcut',
+    '/dsh-switch/health',
   ]) {
     assert.ok(registered.includes(path), `missing route ${path}: ${JSON.stringify(registered)}`)
   }
