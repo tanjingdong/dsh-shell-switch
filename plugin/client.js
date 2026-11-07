@@ -115,6 +115,15 @@ window.__ModuleLoader__.load({
       );
       if (typeof ctx.slots.inject === "function") ctx.slots.inject("sidebar.footer.action", mount);
       else mount();
+
+      // The plugins page shows a 配置 control on a bundle row when this entry
+      // names that row; the key is <package>#<row id>.
+      const mountRow = () => ctx.slots.register(
+        { name: "plugins.row.config", key: "dsh-shell-switch#dsh-shell-switch" },
+        ({ view }) => (view === "summary" ? "外壳切换" : h("div", null, "设置占位")),
+      );
+      if (typeof ctx.slots.inject === "function") ctx.slots.inject("plugins.row.config", mountRow);
+      else mountRow();
     }
 
     exports.name = name;

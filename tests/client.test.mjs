@@ -27,21 +27,26 @@ function fakeReact() {
 }
 
 /** Render through the slots registry and expand function components. */
-function renderEntry(bundle) {
+function mountBundle(bundle) {
   const react = fakeReact()
   const module = bundle.factory((name) => {
     assert.equal(name, 'react')
     return react
   })
-  let element = null
+  const registrations = []
   module.apply({
     slots: {
-      register: (options, render) => { element = render() },
-      inject: (name, mount) => mount(),
+      register: (options, render) => { registrations.push({ ...options, render }); return () => {} },
+      inject: (name, mount) => { mount(); return () => {} },
     },
   })
-  assert.ok(element, 'apply must mount a sidebar entry')
-  return expand(element)
+  return registrations
+}
+
+function renderEntry(bundle) {
+  const sidebar = mountBundle(bundle).find((entry) => entry.name === 'sidebar.footer.action')
+  assert.ok(sidebar, 'apply must mount a sidebar entry')
+  return expand(sidebar.render())
 }
 
 function expand(node) {
@@ -104,6 +109,12 @@ test('the sidebar trigger keeps the host text color so the arrow stays visible',
   ))
   assert.ok(trigger, 'the sidebar trigger must render')
   assert.equal(trigger.props.style.color, 'inherit')
+})
+
+test('the bundle registers a row config page for its own row', () => {
+  const row = mountBundle(loadBundle()).find((entry) => entry.name === 'plugins.row.config')
+  assert.ok(row, 'must register into plugins.row.config')
+  assert.equal(row.key, 'dsh-shell-switch#dsh-shell-switch')
 })
 
 test('the panel offers both shells and a close action', () => {
