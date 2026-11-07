@@ -40,6 +40,7 @@ export async function switchTo(target, deps) {
   const {
     paths, force = false, log = () => {}, list = listProcesses, kill = killTree,
     prepare = async () => {}, startWeb, startClient, busyProbe = fetchBusy, port,
+    pickPort,
   } = deps
 
   const current = await detectCurrent({ paths, list })
@@ -59,10 +60,13 @@ export async function switchTo(target, deps) {
   }
 
   let lastError
+  const choosePort = pickPort ?? (async () => port)
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
-      await (target === 'web' ? startWeb() : startClient())
-      return { switched: true, target }
+      // A failed attempt must not leave its port behind: re-probe it first.
+      const attemptPort = await choosePort()
+      await (target === 'web' ? startWeb({ port: attemptPort }) : startClient({ port: attemptPort }))
+      return { switched: true, target, port: attemptPort }
     } catch (error) {
       lastError = error
       log(`[switch] 第 ${attempt} 次启动失败：${error?.message ?? error}`)

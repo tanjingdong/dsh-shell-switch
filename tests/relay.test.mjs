@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import net from 'node:net'
-import { createRelay } from '../src/relay.mjs'
+import { createRelay, parseRelayArgs, runRelayCli } from '../src/relay.mjs'
 
 function once(emitter, event) {
   return new Promise((resolve) => emitter.once(event, resolve))
@@ -25,4 +25,28 @@ test('relay forwards bytes to the target and survives a bad address', async () =
   await relay.close()
   echo.close()
   await once(echo, 'close')
+})
+
+test('parseRelayArgs reads the ports and the address list', () => {
+  assert.deepEqual(
+    parseRelayArgs(['--target-port', '3080', '--listen-port', '3081', '--addresses', '10.0.0.1, 10.0.0.2']),
+    { targetPort: 3080, listenPort: 3081, addresses: ['10.0.0.1', '10.0.0.2'] },
+  )
+})
+
+test('parseRelayArgs refuses to start without a target port', () => {
+  assert.throws(() => parseRelayArgs(['--listen-port', '1']), (error) => error.code === 'bad-relay-args')
+  assert.throws(() => parseRelayArgs(['--nope']), (error) => error.code === 'bad-relay-args')
+})
+
+test('the relay cli hands the parsed options to the factory', async () => {
+  let seen = null
+  const relay = await runRelayCli(
+    ['--target-port', '3080', '--listen-port', '3090', '--addresses', '1.2.3.4'],
+    { relayFactory: async (options) => { seen = options; return { results: [], close: async () => {} } } },
+  )
+  assert.equal(seen.targetPort, 3080)
+  assert.equal(seen.listenPort, 3090)
+  assert.deepEqual(seen.addresses, ['1.2.3.4'])
+  assert.ok(relay)
 })

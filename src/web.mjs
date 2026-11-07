@@ -1,7 +1,10 @@
 import { spawn } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { LauncherError } from './errors.mjs'
 import { probePort } from './ports.mjs'
-import { createRelay } from './relay.mjs'
+import { killTree } from './procs.mjs'
+
+const RELAY_SCRIPT = fileURLToPath(new URL('./relay.mjs', import.meta.url))
 
 /** CLI arguments for the web profile, one trusted host per extra address. */
 export function buildWebArgs({ port, addresses = [], host = '127.0.0.1' }) {
@@ -36,6 +39,21 @@ function defaultSpawn(paths, args) {
   })
 }
 
+/**
+ * The relay must outlive the launcher, so it runs as its own detached node
+ * process. `process.execPath` is the node already running this file.
+ */
+function defaultSpawnRelay({ targetPort, listenPort, addresses }) {
+  const child = spawn(process.execPath, [
+    RELAY_SCRIPT,
+    '--target-port', String(targetPort),
+    '--listen-port', String(listenPort),
+    '--addresses', (addresses ?? []).join(','),
+  ], { detached: true, stdio: 'ignore', windowsHide: true })
+  child.unref()
+  return { pid: child.pid }
+}
+
 function defaultOpen(url) {
   spawn('cmd', ['/c', 'start', '', url], { windowsHide: true, detached: true, stdio: 'ignore' }).unref()
 }
@@ -49,12 +67,17 @@ function withTimeout(promise, ms, code) {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer))
 }
 
-/** Start the web host, publish it on the extra addresses, open the browser. */
+/**
+ * Start the web host and publish it through a separate relay process.
+ * Every failure unwinds what this call already started.
+ */
 export async function startWeb({
   paths, port, addresses = [], spawnProcess = defaultSpawn, wait = waitReady,
-  relayFactory = createRelay, openBrowser = defaultOpen, log = () => {},
+  spawnRelay = defaultSpawnRelay, openBrowser = defaultOpen, kill = killTree,
+  onSpawn = async () => {}, tokenTimeoutMs = 15000, log = () => {},
 }) {
   const child = spawnProcess(paths, buildWebArgs({ port, addresses }))
+  let relayPid = null
   let buffer = ''
   let resolveUrl
   const urlPromise = new Promise((resolve) => { resolveUrl = resolve })
@@ -64,21 +87,30 @@ export async function startWeb({
     if (url) resolveUrl(url)
   })
   child.stderr.on('data', (chunk) => log(`[web] ${chunk.toString().trim()}`))
+  const failed = new Promise((resolve) => child.once('error', (error) => resolve({ error })))
 
-  const ready = await wait({ port })
-  if (!ready) {
-    child.kill()
-    throw new LauncherError('start-timeout', `web 在端口 ${port} 上没有就绪`)
+  try {
+    await onSpawn(child.pid)
+    const outcome = await Promise.race([wait({ port }).then((ready) => ({ ready })), failed])
+    if (outcome.error) {
+      throw new LauncherError('spawn-failed', `无法启动 web：${outcome.error?.message ?? outcome.error}`)
+    }
+    if (!outcome.ready) throw new LauncherError('start-timeout', `web 在端口 ${port} 上没有就绪`)
+    const url = await withTimeout(urlPromise, tokenTimeoutMs, 'no-token-url')
+    relayPid = (await spawnRelay({ targetPort: port, listenPort: port, addresses, log }))?.pid ?? null
+    openBrowser(url)
+    return { pid: child.pid, port, url, relayPid, child }
+  } catch (error) {
+    if (relayPid) await kill(relayPid, { force: true }).catch(() => {})
+    if (child.pid) await kill(child.pid, { force: true }).catch(() => {})
+    throw error
   }
-  const url = await withTimeout(urlPromise, 15000, 'no-token-url')
-  const relay = await relayFactory({ targetPort: port, addresses, log })
-  openBrowser(url)
-  return { pid: child.pid, port, url, relay, child }
 }
 
-/** Stop the host: close the relay first, then the process tree. */
-export async function stopWeb({ relay, pid, kill }) {
-  if (relay) await relay.close()
-  if (pid && kill) return await kill(pid, { force: true })
-  return { killed: true, forced: false }
+/** Stop the host: the relay first, then the host process tree. */
+export async function stopWeb({ relayPid, pid, kill = killTree }) {
+  const result = { killed: true, forced: false }
+  if (relayPid) await kill(relayPid, { force: true }).catch(() => {})
+  if (pid) return await kill(pid, { force: true })
+  return result
 }

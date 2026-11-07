@@ -44,6 +44,19 @@ test('fetchBusy returns null when the state route is unreachable', async () => {
   assert.equal(await fetchBusy({ port: 1, fetchImpl }), null)
 })
 
+test('switchTo re-picks the port before every attempt', async () => {
+  const ports = []
+  let next = 3080
+  const deps = {
+    paths: {}, force: false, log: () => {}, prepare: async () => {},
+    list: async () => [], kill: async () => ({ killed: true, forced: false }),
+    pickPort: async () => next++,
+    startWeb: async ({ port }) => { ports.push(port); throw new Error('boom') },
+  }
+  await assert.rejects(switchTo('web', deps), (error) => error.code === 'start-failed')
+  assert.deepEqual(ports, [3080, 3081, 3082])
+})
+
 test('detectCurrent reports the shell that owns the profile', async () => {
   const paths = { desktopProfile: 'p\\desktop', webProfile: 'p\\web' }
   assert.equal(await detectCurrent({ paths, list: async () => [] }), null)

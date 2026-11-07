@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import net from 'node:net'
-import { probePort, findFreePort } from '../src/ports.mjs'
+import { probePort, findFreePort, reservePort } from '../src/ports.mjs'
 
 async function withServer(fn) {
   const server = net.createServer().listen(0, '127.0.0.1')
@@ -28,4 +28,13 @@ test('findFreePort skips an occupied port and rejects an exhausted range', async
     assert.notEqual(picked, busy)
     await assert.rejects(findFreePort({ start: busy, end: busy }), (e) => e.code === 'no-free-port')
   })
+})
+
+test('reservePort keeps the preferred port when free and picks another when taken', async () => {
+  assert.equal(await reservePort(3080, { probe: async () => false }), 3080)
+  assert.equal(
+    await reservePort(3080, { probe: async () => true, find: async ({ start }) => start + 1 }),
+    3081,
+  )
+  assert.equal(await reservePort(null, { find: async ({ start }) => start }), 3080)
 })

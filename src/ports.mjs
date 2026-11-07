@@ -19,3 +19,15 @@ export async function findFreePort({ start = 3080, end = 3099, host = '127.0.0.1
   }
   throw new LauncherError('no-free-port', `端口 ${start}-${end} 全部被占用`)
 }
+
+/**
+ * Keep the preferred port when it is still free, otherwise take the next
+ * free one. Called before every start attempt so a stale listener cannot
+ * make the next attempt reuse a dead port.
+ */
+export async function reservePort(
+  preferred, { probe = probePort, find = findFreePort, start = 3080, end = 3099 } = {},
+) {
+  if (preferred && !(await probe(preferred))) return preferred
+  return await find({ start, end })
+}

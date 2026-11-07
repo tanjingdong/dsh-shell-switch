@@ -1,13 +1,15 @@
 import readline from 'node:readline/promises'
 import { LauncherError } from './errors.mjs'
 import { assertInstalled, resolvePaths } from './paths.mjs'
-import { findFreePort, probePort } from './ports.mjs'
+import { reservePort } from './ports.mjs'
 import { killTree } from './procs.mjs'
 import { readState, writeState } from './state.mjs'
 import { fetchBusy, status, switchTo } from './launcher.mjs'
 import { startWeb } from './web.mjs'
 
 const COMMANDS = ['menu', 'client', 'web', 'status', 'stop']
+
+const LAN_ADDRESSES = ['192.168.0.106', '10.147.20.214', '100.100.0.3']
 
 /** Parse argv into a command plus the force flag. */
 export function parseArgs(argv = []) {
@@ -78,25 +80,32 @@ export async function run(argv = process.argv.slice(2), overrides = {}) {
     }
     const pid = state?.pid ?? info.pid
     if (!pid) throw new LauncherError('no-pid', '找不到要停止的进程')
+    if (state?.relayPid) await killTree(state.relayPid, { force: true }).catch(() => {})
     const result = await killTree(pid, { force: true })
     await writeState(paths.stateFile, { ...state, mode: info.current, stoppedAt: new Date().toISOString() })
     log(result.killed ? '已停止' : '停止失败，进程仍然存在')
     return result.killed ? 0 : 1
   }
 
-  const port = state?.port ?? await findFreePort({ start: 3080 })
-  if (resolved === 'web' && await probePort(port)) {
-    log(`端口 ${port} 已被占用，换一个`)
-  }
+  const preferredPort = state?.port ?? 3080
 
   await switchTo(resolved, {
     paths, force, log,
-    port,
+    port: preferredPort,
+    pickPort: () => reservePort(preferredPort),
     prepare: async () => log('预检通过'),
     busyProbe: async ({ port: busyPort }) => (busyPort ? fetchBusy({ port: busyPort }) : null),
-    startWeb: async () => {
-      const result = await startWeb({ paths, port, addresses: ['192.168.0.106', '10.147.20.214', '100.100.0.3'], log })
-      await writeState(paths.stateFile, { mode: 'web', pid: result.pid, port: result.port, startedAt: new Date().toISOString() })
+    startWeb: async ({ port }) => {
+      const result = await startWeb({
+        paths, port, addresses: LAN_ADDRESSES, log,
+        onSpawn: (pid) => writeState(paths.stateFile, {
+          mode: 'web', pid, port, startedAt: new Date().toISOString(),
+        }),
+      })
+      await writeState(paths.stateFile, {
+        mode: 'web', pid: result.pid, port: result.port,
+        relayPid: result.relayPid, startedAt: new Date().toISOString(),
+      })
       return result
     },
     startClient: async () => {
