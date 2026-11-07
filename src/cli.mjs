@@ -1,3 +1,4 @@
+import path from 'node:path'
 import readline from 'node:readline/promises'
 import { LauncherError } from './errors.mjs'
 import { createLogger } from './log.mjs'
@@ -149,7 +150,9 @@ export async function run(argv = process.argv.slice(2), overrides = {}) {
     startWeb: async ({ port }) => {
       const result = await startWeb({
         paths, port, addresses: LAN_ADDRESSES, log: write,
-        notifyUrl: ({ url }) => showUrlDialog({ url }),
+        notifyUrl: ({ url }) => showUrlDialog({
+          url, logFile: path.join(paths.logDir, 'url-dialog.log'),
+        }),
         onSpawn: (pid) => writeState(paths.stateFile, {
           mode: 'web', pid, port, startedAt: new Date().toISOString(),
         }),

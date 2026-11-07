@@ -1,8 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  PROCESS_QUERY, collectDescendants, isDesktopHost, isElectronShell, isWebHost, killTree,
-  listListeningPorts, listProcesses,
+  PROCESS_QUERY, collectDescendants, isDesktopHost, isElectronShell, isRelayProcess,
+  isWebHost, killTree, listListeningPorts, listProcesses, relayScriptFile,
 } from '../src/procs.mjs'
 
 const paths = {
@@ -68,6 +68,12 @@ test('killTree can end one process without a tree kill', async () => {
   const kill = async (pid, mode, options) => { calls.push([mode, options]) }
   await assert.rejects(killTree(1, { force: true, timeoutMs: 0, list, kill, tree: false }), /无法结束进程/)
   assert.deepEqual(calls, [['graceful', { tree: false }], ['force', { tree: false }]])
+})
+
+test('isRelayProcess matches only the real relay script path', () => {
+  assert.equal(isRelayProcess({ commandLine: `"C:\\n\\node.exe" "${relayScriptFile}" --target-port 1` }), true)
+  assert.equal(isRelayProcess({ commandLine: 'node -e "log(src/relay.mjs)"' }), false)
+  assert.equal(isRelayProcess({ commandLine: 'node mcp-server.js' }), false)
 })
 
 test('listProcesses tolerates a single-object JSON payload', async () => {

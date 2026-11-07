@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { LauncherError } from './errors.mjs'
 import {
-  collectDescendants, isDesktopHost, isElectronShell, isWebHost, killTree,
+  collectDescendants, isDesktopHost, isElectronShell, isRelayProcess, isWebHost, killTree,
   listListeningPorts, listProcesses,
 } from './procs.mjs'
 
@@ -181,23 +181,30 @@ export async function switchTo(target, deps) {
 export async function stopEverything({
   paths, state, current, list = listProcesses, kill = killTree, timeoutMs = 10000,
 }) {
-  const running = current ?? await detectCurrent({ paths, list })
-  if (!running) {
-    const killed = []
-    if (state?.relayPid) {
-      // The host died but its relay survived; stop must still clean it up.
-      await kill(state.relayPid, { force: true, timeoutMs: 0 }).catch(() => {})
-      killed.push(state.relayPid)
-    }
-    return { current: null, killed }
+  const processes = await list()
+  const cached = async () => processes
+  const running = current ?? await detectCurrent({ paths, list: cached })
+  const killed = running
+    ? await stopShell({ current: running, paths, list: cached, kill, timeoutMs })
+    : []
+
+  // A relay can outlive its state record: a failed switch, or a launcher that
+  // died mid-way, leaves one holding the LAN ports with nothing pointing at it.
+  const strays = processes
+    .filter((process) => isRelayProcess(process))
+    .map((process) => process.pid)
+    .filter((pid) => !killed.includes(pid) && pid !== state?.relayPid)
+  for (const pid of strays) {
+    await kill(pid, { force: true, timeoutMs: 0, tree: false }).catch(() => {})
+    killed.push(pid)
   }
-  const killed = await stopShell({ current: running, paths, list, kill, timeoutMs })
+
   if (state?.relayPid && !killed.includes(state.relayPid)) {
     // The relay holds no user data; there is nothing to wait for.
-    await kill(state.relayPid, { force: true, timeoutMs: 0 }).catch(() => {})
+    await kill(state.relayPid, { force: true, timeoutMs: 0, tree: false }).catch(() => {})
     killed.push(state.relayPid)
   }
-  return { current: running, killed }
+  return { current: running ?? null, killed }
 }
 
 /**

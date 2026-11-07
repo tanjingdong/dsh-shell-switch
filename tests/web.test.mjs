@@ -1,15 +1,20 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
-import { buildWebArgs, extractTokenUrl, showUrlDialog, waitReady, startWeb, stopWeb } from '../src/web.mjs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
+import {
+  buildWebArgs, extractTokenUrl, showUrlDialog, spawnWebHost, waitForToken, waitReady,
+  startWeb, stopWeb,
+} from '../src/web.mjs'
 
-function fakeChild(lines) {
+const OK_LOG = 'dsh web: http://127.0.0.1:3080/?token=abc'
+const readLogWith = (text) => () => text
+
+function fakeChild() {
   const child = new EventEmitter()
   child.pid = 123
-  child.stdout = new EventEmitter()
-  child.stderr = new EventEmitter()
   child.kill = () => {}
-  queueMicrotask(() => { for (const line of lines) child.stdout.emit('data', Buffer.from(`${line}\n`)) })
   return child
 }
 
@@ -50,18 +55,63 @@ test('waitReady probes HTTP only after TCP accepts', async () => {
   assert.equal(httpCalls, 0)
 })
 
+test('the host is spawned detached with its output in a file', () => {
+  const calls = []
+  const spawnImpl = (file, args, options) => {
+    calls.push({ file, args, options })
+    return { pid: 5, unref: () => { calls[0].unrefed = true } }
+  }
+  spawnWebHost({
+    paths: { exe: 'e.exe', cliJs: 'cli.js' },
+    args: ['web', '--port', '3080'],
+    logFile: join(tmpdir(), 'dsh-host-test.log'),
+    spawnImpl,
+  })
+  const [call] = calls
+  assert.equal(call.file, 'e.exe')
+  assert.deepEqual(call.args.slice(0, 3), ['--expose-internals', 'cli.js', 'web'])
+  assert.equal(call.options.stdio[0], 'ignore')
+  // A numeric fd means the child owns a file handle; a pipe would die with us.
+  assert.equal(typeof call.options.stdio[1], 'number')
+  assert.equal(typeof call.options.stdio[2], 'number')
+  // Detached: a non-detached child is killed when the launcher exits.
+  assert.equal(call.options.detached, true)
+  assert.equal(call.unrefed, true)
+  assert.equal(call.options.env.ELECTRON_RUN_AS_NODE, '1')
+})
+
+test('waitForToken reads the url out of the host log', async () => {
+  let calls = 0
+  const url = await waitForToken({
+    file: 'host.log',
+    timeoutMs: 50,
+    intervalMs: 1,
+    read: () => (++calls >= 2 ? OK_LOG : ''),
+  })
+  assert.equal(url, 'http://127.0.0.1:3080/?token=abc')
+})
+
+test('waitForToken gives up on a log that never carries a token', async () => {
+  await assert.rejects(
+    waitForToken({ file: 'host.log', timeoutMs: 10, intervalMs: 1, read: () => 'no token' }),
+    (error) => error.code === 'no-token-url',
+  )
+})
+
 test('startWeb records the pid before waiting, then relays and opens the browser', async () => {
   const order = []
   let opened = null
   let relayArgs = null
-  const child = fakeChild(['dsh web: http://127.0.0.1:3080/?token=abc'])
+  let spawnOptions = null
+  const child = fakeChild()
   const result = await startWeb({
-    paths: { cliJs: 'c', exe: 'e' },
+    paths: { cliJs: 'c', exe: 'e', logDir: join(tmpdir(), 'dsh-host-logs') },
     port: 3080,
     addresses: ['1.2.3.4'],
-    spawnProcess: () => child,
+    spawnProcess: (options) => { spawnOptions = options; return child },
     onSpawn: async (pid) => order.push(`spawn:${pid}`),
     wait: async () => { order.push('wait'); return true },
+    readLog: readLogWith(OK_LOG),
     spawnRelay: async (options) => { relayArgs = options; order.push('relay'); return { pid: 4321 } },
     openBrowser: (url) => { opened = url; order.push('open') },
   })
@@ -70,21 +120,21 @@ test('startWeb records the pid before waiting, then relays and opens the browser
   assert.equal(result.pid, 123)
   assert.equal(result.relayPid, 4321)
   assert.equal(relayArgs.targetPort, 3080)
-  assert.equal(relayArgs.listenPort, 3080)
   assert.deepEqual(relayArgs.addresses, ['1.2.3.4'])
+  assert.match(String(spawnOptions.logFile), /web-host-3080\.log$/)
   assert.deepEqual(order, ['spawn:123', 'wait', 'relay', 'open'])
 })
 
 test('startWeb kills the spawned host when the token url never arrives', async () => {
   const killed = []
-  const child = fakeChild([])
   await assert.rejects(
     startWeb({
       paths: { cliJs: 'c', exe: 'e' },
       port: 3080,
       addresses: [],
-      spawnProcess: () => child,
+      spawnProcess: () => fakeChild(),
       wait: async () => true,
+      readLog: readLogWith('nothing'),
       kill: async (pid, options) => { killed.push([pid, options]) },
       tokenTimeoutMs: 20,
     }),
@@ -95,14 +145,14 @@ test('startWeb kills the spawned host when the token url never arrives', async (
 
 test('startWeb kills the host and the relay when the relay cannot start', async () => {
   const killed = []
-  const child = fakeChild(['dsh web: http://127.0.0.1:3080/?token=abc'])
   await assert.rejects(
     startWeb({
       paths: { cliJs: 'c', exe: 'e' },
       port: 3080,
       addresses: ['1.2.3.4'],
-      spawnProcess: () => child,
+      spawnProcess: () => fakeChild(),
       wait: async () => true,
+      readLog: readLogWith(OK_LOG),
       spawnRelay: async () => { throw new Error('relay refused') },
       kill: async (pid, options) => { killed.push([pid, options]) },
     }),
@@ -113,13 +163,13 @@ test('startWeb kills the host and the relay when the relay cannot start', async 
 
 test('startWeb hands the token url to the notifier after opening it', async () => {
   const order = []
-  const child = fakeChild(['dsh web: http://127.0.0.1:3080/?token=abc'])
   await startWeb({
     paths: { cliJs: 'c', exe: 'e' },
     port: 3080,
     addresses: [],
-    spawnProcess: () => child,
+    spawnProcess: () => fakeChild(),
     wait: async () => true,
+    readLog: readLogWith(OK_LOG),
     spawnRelay: async () => ({ pid: 1 }),
     openBrowser: () => order.push('open'),
     notifyUrl: ({ url }) => { order.push(`notify:${url}`) },
@@ -128,13 +178,13 @@ test('startWeb hands the token url to the notifier after opening it', async () =
 })
 
 test('a failing url dialog never tears down a host that is already up', async () => {
-  const child = fakeChild(['dsh web: http://127.0.0.1:3080/?token=abc'])
   const result = await startWeb({
     paths: { cliJs: 'c', exe: 'e' },
     port: 3080,
     addresses: [],
-    spawnProcess: () => child,
+    spawnProcess: () => fakeChild(),
     wait: async () => true,
+    readLog: readLogWith(OK_LOG),
     spawnRelay: async () => ({ pid: 1 }),
     openBrowser: () => {},
     notifyUrl: async () => { throw new Error('no dialog') },
@@ -149,18 +199,21 @@ test('showUrlDialog copies the url and shows it in a message box', () => {
   showUrlDialog({
     url: 'http://127.0.0.1:3080/?token=abc',
     env: {},
+    logFile: join(tmpdir(), 'dsh-dialog-test.log'),
     spawnProcess: (file, args, options) => {
       call = { file, args, options }
       return child
     },
   })
   assert.equal(call.file, 'powershell.exe')
-  const script = call.args.join(' ')
-  assert.match(script, /Set-Clipboard/)
-  assert.match(script, /MessageBox/)
+  const command = call.args.join(' ')
+  assert.match(command, /-STA/)
+  assert.match(command, /Set-Clipboard/)
+  assert.match(command, /MessageBox/)
   assert.equal(call.options.env.DSH_SWITCH_URL, 'http://127.0.0.1:3080/?token=abc')
   assert.equal(call.options.detached, true)
-  assert.equal(call.options.stdio, 'ignore')
+  // The dialog must not inherit a pipe from the launcher either.
+  assert.equal(typeof call.options.stdio[1], 'number')
 })
 
 test('stopWeb kills the relay process before the host', async () => {
@@ -175,13 +228,13 @@ test('stopWeb kills the relay process before the host', async () => {
 })
 
 test('a dead relay address only loses that entry point', async () => {
-  const child = fakeChild(['dsh web: http://127.0.0.1:3080/?token=abc'])
   const result = await startWeb({
     paths: { cliJs: 'c', exe: 'e' },
     port: 3080,
     addresses: ['203.0.113.9'],
-    spawnProcess: () => child,
+    spawnProcess: () => fakeChild(),
     wait: async () => true,
+    readLog: readLogWith(OK_LOG),
     spawnRelay: async () => ({
       pid: 4321,
       results: [{ address: '203.0.113.9', status: 'ENOTFOUND' }],

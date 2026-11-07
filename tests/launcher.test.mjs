@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { switchTo, fetchBusy, currentHostPort, detectCurrent, startClient, stopEverything, stopShell, waitForClient } from '../src/launcher.mjs'
+import { relayScriptFile } from '../src/procs.mjs'
 
 const clientPaths = {
   desktopProfile: 'C:\\u\\.dsh\\profiles\\desktop',
@@ -94,7 +95,22 @@ test('stopEverything ends a leftover relay even when no shell is running', async
     kill: async (pid, options) => { killed.push([pid, options]) },
   })
   assert.deepEqual(result, { current: null, killed: [30] })
-  assert.deepEqual(killed, [[30, { force: true, timeoutMs: 0 }]])
+  assert.deepEqual(killed, [[30, { force: true, timeoutMs: 0, tree: false }]])
+})
+
+test('stopEverything ends an orphan relay whose state record was lost', async () => {
+  const killed = []
+  const relay = {
+    pid: 30,
+    commandLine: `"C:\\n\\node.exe" "${relayScriptFile}" --target-port 3080`,
+  }
+  const result = await stopEverything({
+    paths: clientPaths,
+    state: null,
+    list: async () => [relay],
+    kill: async (pid, options) => { killed.push([pid, options]) },
+  })
+  assert.deepEqual(result, { current: null, killed: [30] })
 })
 
 test('stopEverything reports nothing running when no shell is detected', async () => {

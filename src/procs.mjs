@@ -1,4 +1,9 @@
 import { execFile } from 'node:child_process'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+/** The relay CLI that lives next to this module; used to spot leftovers. */
+export const relayScriptFile = path.join(path.dirname(fileURLToPath(import.meta.url)), 'relay.mjs')
 
 /** PowerShell 5.1 prints in the console code page; force UTF-8 before the query. */
 export const PROCESS_QUERY = '[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false); '
@@ -43,6 +48,11 @@ export function isDesktopHost(process, paths) {
 export function isElectronShell(process, paths) {
   const cmd = normalize(process.commandLine)
   return cmd.includes(normalize(paths.exe)) && !cmd.includes('dsh-desktop-host')
+}
+
+/** A relay started from this checkout. Matched by full script path, not a word. */
+export function isRelayProcess(process) {
+  return normalize(process.commandLine).includes(normalize(relayScriptFile))
 }
 
 const LISTEN_QUERY = (pid) => '[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false); '
