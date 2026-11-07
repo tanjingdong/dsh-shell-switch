@@ -140,6 +140,33 @@ test('the row config page answers the summary view with a label', () => {
   assert.equal(row.render({ view: 'summary' }), '外壳切换')
 })
 
+test('the page buttons inherit the host text color', () => {
+  const bundle = loadBundle({
+    fetch: async () => ({ ok: true, json: async () => ({ report: {}, webhook: {}, network: {} }) }),
+  })
+  const row = mountBundle(bundle, { firstState: false })
+    .find((entry) => entry.name === 'plugins.row.config')
+  const tree = expand(row.render({ view: 'page' }))
+  for (const label of ['保存', '发送测试']) {
+    const button = find(tree, (node) => node.type === 'button' && texts(node).includes(label))
+    assert.ok(button, `missing button ${label}`)
+    assert.equal(button.props.style.color, 'inherit', `${label} must inherit the page text color`)
+  }
+})
+
+test('the page explains the network settings', () => {
+  const bundle = loadBundle({
+    fetch: async () => ({ ok: true, json: async () => ({ report: {}, webhook: {}, network: {} }) }),
+  })
+  const row = mountBundle(bundle, { firstState: false })
+    .find((entry) => entry.name === 'plugins.row.config')
+  const words = texts(expand(row.render({ view: 'page' })))
+  for (const expected of ['监听网卡', '只绑定回环']) {
+    assert.ok(words.includes(expected), `missing ${expected}: ${JSON.stringify(words)}`)
+  }
+  assert.ok(words.some((word) => word.includes('127.0.0.1')), 'loopback explanation missing')
+})
+
 test('the panel offers both shells and a close action', () => {
   const words = texts(renderEntry(loadBundle()))
   assert.ok(words.includes('切换外壳'), `panel title missing: ${JSON.stringify(words)}`)

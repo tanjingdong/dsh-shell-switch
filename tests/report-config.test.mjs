@@ -24,6 +24,7 @@ test('normalizeReportConfig keeps known keys and ignores junk', () => {
   assert.deepEqual(config, {
     report: { clipboard: false, dialog: true, webhook: true },
     webhook: { url: 'http://x', template: '{"a":1}' },
+    network: { addresses: ['192.168.0.106', '10.147.20.214', '100.100.0.3'], loopbackOnly: false },
   })
 })
 
@@ -42,6 +43,23 @@ test('validation rejects a non-http url and a non-JSON template', () => {
 test('an unquoted number placeholder is still valid JSON after rendering', () => {
   const config = normalizeReportConfig({ webhook: { url: '', template: '{"n": {port}}' } })
   assert.deepEqual(validateReportConfig(config), [])
+})
+
+test('network defaults to the three LAN addresses with the relay enabled', () => {
+  assert.deepEqual(DEFAULT_REPORT_CONFIG.network.addresses, ['192.168.0.106', '10.147.20.214', '100.100.0.3'])
+  assert.equal(DEFAULT_REPORT_CONFIG.network.loopbackOnly, false)
+})
+
+test('normalizeReportConfig trims and de-duplicates nothing, just cleans blanks', () => {
+  const config = normalizeReportConfig({ network: { addresses: [' 10.0.0.1 ', '', '  '], loopbackOnly: true } })
+  assert.deepEqual(config.network, { addresses: ['10.0.0.1'], loopbackOnly: true })
+})
+
+test('validation rejects 0.0.0.0 and anything that is not an IPv4 address', () => {
+  const validate = (network) => validateReportConfig(normalizeReportConfig({ network })).join()
+  assert.match(validate({ addresses: ['0.0.0.0'] }), /0\.0\.0\.0/)
+  assert.match(validate({ addresses: ['not-an-ip'] }), /IPv4/)
+  assert.deepEqual(validate({ addresses: [] }), '')
 })
 
 test('renderTemplate replaces only the known placeholders', () => {

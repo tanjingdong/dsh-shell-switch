@@ -12,8 +12,6 @@ import { copyToClipboard, showUrlDialog, startWeb } from './web.mjs'
 
 const COMMANDS = ['menu', 'client', 'web', 'status', 'stop']
 
-const LAN_ADDRESSES = ['192.168.0.106', '10.147.20.214', '100.100.0.3']
-
 /** Parse argv into a command plus the force and immediate flags. */
 export function parseArgs(argv = []) {
   let force = false
@@ -65,7 +63,7 @@ export async function runReport({ paths, info, deps = {} } = {}) {
   const read = deps.read ?? ((file) => readReportConfig(file))
   const report = deps.report ?? ((args) => reportSwitch(args))
   try {
-    const config = await read(reportConfigFile(paths))
+    const config = deps.config ?? await read(reportConfigFile(paths))
     return await report({
       config,
       info,
@@ -180,6 +178,10 @@ export async function run(argv = process.argv.slice(2), overrides = {}) {
 
   const preferredPort = preferredPortFor(resolved, state)
   const busyPort = await currentHostPort({ paths, state })
+  const runtimeConfig = await readReportConfig(reportConfigFile(paths))
+  const publishAddresses = runtimeConfig.network.loopbackOnly
+    ? []
+    : runtimeConfig.network.addresses
   let startedUrl = ''
 
   const switched = await switchWithConsent(resolved, {
@@ -191,7 +193,7 @@ export async function run(argv = process.argv.slice(2), overrides = {}) {
     busyProbe: async () => (busyPort ? fetchBusy({ port: busyPort }) : null),
     startWeb: async ({ port }) => {
       const result = await startWeb({
-        paths, port, addresses: LAN_ADDRESSES, log: write,
+        paths, port, addresses: publishAddresses, log: write,
         onSpawn: (pid) => writeState(paths.stateFile, {
           mode: 'web', pid, port, startedAt: new Date().toISOString(),
         }),
@@ -217,7 +219,7 @@ export async function run(argv = process.argv.slice(2), overrides = {}) {
     await runReport({
       paths,
       info: { target: resolved, port: switched.port ?? preferredPort, url: startedUrl },
-      deps: { log: write },
+      deps: { log: write, config: runtimeConfig },
     })
   }
   return 0

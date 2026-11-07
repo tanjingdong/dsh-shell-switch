@@ -181,7 +181,7 @@ test('a failing url dialog never tears down a host that is already up', async ()
   const result = await startWeb({
     paths: { cliJs: 'c', exe: 'e' },
     port: 3080,
-    addresses: [],
+    addresses: ['1.2.3.4'],
     spawnProcess: () => fakeChild(),
     wait: async () => true,
     readLog: readLogWith(OK_LOG),
@@ -242,6 +242,22 @@ test('stopWeb kills the relay process before the host', async () => {
   })
   assert.deepEqual(killed.map(([pid]) => pid), [4321, 123])
   assert.deepEqual(killed[0][1], { force: true })
+})
+
+test('loopback-only starts no relay process at all', async () => {
+  let relayCalls = 0
+  const result = await startWeb({
+    paths: { cliJs: 'c', exe: 'e' },
+    port: 3080,
+    addresses: [],
+    spawnProcess: () => fakeChild(),
+    wait: async () => true,
+    readLog: readLogWith(OK_LOG),
+    spawnRelay: async () => { relayCalls += 1; return { pid: 1 } },
+    openBrowser: () => {},
+  })
+  assert.equal(relayCalls, 0)
+  assert.equal(result.relayPid, null)
 })
 
 test('a dead relay address only loses that entry point', async () => {

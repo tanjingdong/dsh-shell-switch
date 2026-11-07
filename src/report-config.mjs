@@ -4,6 +4,10 @@ import path from 'node:path'
 export const DEFAULT_REPORT_CONFIG = {
   report: { clipboard: true, dialog: true, webhook: false },
   webhook: { url: '', template: '{"text":"DSH 外壳已切换到 {target}：{url}"}' },
+  network: {
+    addresses: ['192.168.0.106', '10.147.20.214', '100.100.0.3'],
+    loopbackOnly: false,
+  },
 }
 
 /** Values used when validating a template at save time. */
@@ -34,6 +38,7 @@ export function normalizeReportConfig(raw) {
   const source = raw && typeof raw === 'object' ? raw : {}
   const report = source.report && typeof source.report === 'object' ? source.report : {}
   const webhook = source.webhook && typeof source.webhook === 'object' ? source.webhook : {}
+  const network = source.network && typeof source.network === 'object' ? source.network : {}
   return {
     report: {
       clipboard: report.clipboard !== false,
@@ -46,8 +51,18 @@ export function normalizeReportConfig(raw) {
         ? webhook.template
         : DEFAULT_REPORT_CONFIG.webhook.template,
     },
+    network: {
+      // An explicit empty list means "publish nowhere"; only a missing list
+      // falls back to the defaults.
+      addresses: Array.isArray(network.addresses)
+        ? network.addresses.map((address) => String(address ?? '').trim()).filter(Boolean)
+        : DEFAULT_REPORT_CONFIG.network.addresses.slice(),
+      loopbackOnly: network.loopbackOnly === true,
+    },
   }
 }
+
+const IPV4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/
 
 /** Empty array means valid; each entry is a Chinese reason. */
 export function validateReportConfig(config) {
@@ -61,6 +76,16 @@ export function validateReportConfig(config) {
     JSON.parse(rendered)
   } catch {
     problems.push('JSON 模板替换占位符后不是合法的 JSON')
+  }
+  for (const address of config?.network?.addresses ?? []) {
+    if (address === '0.0.0.0') {
+      problems.push('监听地址不能是 0.0.0.0：DSH 不允许监听全部网卡')
+      continue
+    }
+    const match = IPV4.exec(address)
+    if (!match || match.slice(1).some((part) => Number(part) > 255)) {
+      problems.push(`监听地址不是合法的 IPv4：${address}`)
+    }
   }
   return problems
 }

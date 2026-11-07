@@ -187,7 +187,9 @@ export async function startWeb({
       throw new LauncherError('start-timeout', `web 在端口 ${port} 上没有就绪（日志：${webLog}）`)
     }
     const url = await waitForToken({ file: webLog, timeoutMs: tokenTimeoutMs, read: readLog })
-    relayPid = (await spawnRelay({ targetPort: port, listenPort: port, addresses, log }))?.pid ?? null
+    if (addresses.length > 0) {
+      relayPid = (await spawnRelay({ targetPort: port, listenPort: port, addresses, log }))?.pid ?? null
+    }
     log(`[web] 主机日志：${webLog}`)
     openBrowser(url)
     try {
