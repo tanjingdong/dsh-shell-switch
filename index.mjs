@@ -2,18 +2,18 @@ import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createLogger } from '../src/log.mjs'
-import { detectCurrent } from '../src/launcher.mjs'
-import { resolvePaths } from '../src/paths.mjs'
-import { buildWebhookBody, sendWebhook } from '../src/report.mjs'
-import { readReportConfig, reportConfigFile } from '../src/report-config.mjs'
-import { createDesktopShortcut } from '../src/shortcut.mjs'
+import { createLogger } from './src/log.mjs'
+import { detectCurrent } from './src/launcher.mjs'
+import { resolvePaths } from './src/paths.mjs'
+import { buildWebhookBody, sendWebhook } from './src/report.mjs'
+import { readReportConfig, reportConfigFile } from './src/report-config.mjs'
+import { createDesktopShortcut } from './src/shortcut.mjs'
 import { createHandoffRoutes } from './routes.mjs'
 
 export const name = 'dsh-shell-switch'
 export const inject = ['webServer']
 
-const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
+const REPO_ROOT = fileURLToPath(new URL('.', import.meta.url))
 
 /**
  * The desktop shortcut runs the menu wrapper, not the bare launcher: the
@@ -23,7 +23,7 @@ export function shortcutSpec(root = REPO_ROOT) {
   return { target: path.join(root, 'dsh-switch-menu.cmd'), dir: root }
 }
 
-const LAUNCHER_CLI = fileURLToPath(new URL('../src/cli.mjs', import.meta.url))
+const LAUNCHER_CLI = fileURLToPath(new URL('./src/cli.mjs', import.meta.url))
 const LAUNCHER_CWD = path.dirname(path.dirname(LAUNCHER_CLI))
 
 function vendoredNode(env) {

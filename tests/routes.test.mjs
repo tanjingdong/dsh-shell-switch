@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { createHandoffRoutes } from '../plugin/routes.mjs'
+import { createHandoffRoutes } from '../routes.mjs'
 
 const loop = { remoteAddress: '127.0.0.1' }
 const headers = { host: '127.0.0.1:3080' }

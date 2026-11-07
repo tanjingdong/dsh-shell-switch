@@ -5,7 +5,7 @@ import vm from 'node:vm'
 
 /** Load the browser bundle the host loads, without a DOM or a real react. */
 function loadBundle(globals = {}) {
-  const code = fs.readFileSync(new URL('../plugin/client.js', import.meta.url), 'utf8')
+  const code = fs.readFileSync(new URL('../client.js', import.meta.url), 'utf8')
   let entry = null
   const window = { __ModuleLoader__: { load: (value) => { entry = value } } }
   vm.runInNewContext(code, { window, ...globals })

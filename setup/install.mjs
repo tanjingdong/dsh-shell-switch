@@ -1,10 +1,10 @@
 import { spawn } from 'node:child_process'
-import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { assertInstalled, resolvePaths } from '../src/paths.mjs'
 import { detectCurrent } from '../src/launcher.mjs'
 
-const PLUGIN_DIR = path.dirname(fileURLToPath(new URL('../plugin/index.mjs', import.meta.url)))
+// One package now: the bundle lives at the repository root.
+const PLUGIN_DIR = fileURLToPath(new URL('..', import.meta.url))
 
 /** Run the CLI, capturing stdout so the dump can be inspected. */
 function runCli(file, args) {

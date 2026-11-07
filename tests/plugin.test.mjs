@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
-import { createLauncherSpawner, createMount, mountRoutes, readActivity, resolveNodeBinary, shortcutSpec } from '../plugin/index.mjs'
+import { createLauncherSpawner, createMount, mountRoutes, readActivity, resolveNodeBinary, shortcutSpec } from '../index.mjs'
 
 test('readActivity counts running agents, jobs and waiting approvals', () => {
   const registry = {

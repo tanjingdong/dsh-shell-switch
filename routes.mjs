@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto'
 import os from 'node:os'
-import { resolvePaths } from '../src/paths.mjs'
+import { resolvePaths } from './src/paths.mjs'
 import {
   normalizeReportConfig, readReportConfig, reportConfigFile, validateReportConfig, writeReportConfig,
-} from '../src/report-config.mjs'
+} from './src/report-config.mjs'
 
 const NONCE_TTL_MS = 5 * 60 * 1000
 
