@@ -14,6 +14,10 @@ window.__ModuleLoader__.load({
     const SURFACE = "#1f1f1f";
     const EDGE = "#4a4a4a";
 
+    const trigger = {
+      background: "transparent", border: "1px solid currentColor", borderRadius: 6,
+      color: "inherit", cursor: "pointer", fontSize: 12, padding: "4px 8px",
+    };
     const button = {
       background: "transparent", border: `1px solid ${EDGE}`, borderRadius: 6,
       color: INK, cursor: "pointer", fontSize: 12, padding: "4px 8px",
@@ -91,7 +95,7 @@ window.__ModuleLoader__.load({
       const [open, setOpen] = useState(false);
       return h("div", null,
         h("button", {
-          style: button,
+          style: trigger,
           "aria-label": "切换外壳",
           title: "切换外壳",
           disabled: false,

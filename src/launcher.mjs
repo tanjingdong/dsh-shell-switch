@@ -1,7 +1,8 @@
 import { spawn } from 'node:child_process'
 import { LauncherError } from './errors.mjs'
 import {
-  isDesktopHost, isElectronShell, isWebHost, killTree, listListeningPorts, listProcesses,
+  collectDescendants, isDesktopHost, isElectronShell, isWebHost, killTree,
+  listListeningPorts, listProcesses,
 } from './procs.mjs'
 
 function sleep(ms) {
@@ -46,11 +47,13 @@ export async function fetchBusy({ port, fetchImpl = globalThis.fetch, timeoutMs 
 
 /**
  * End the shell that owns `current`. The desktop client is a host child inside
- * an Electron window, so both must go: killing only the host leaves a window
- * stuck on the fatal-recovery dialog and blocks the next client start.
+ * an Electron window, so both must go. Every process is ended by pid, never by
+ * tree: the launcher itself is a descendant of the shell it is ending, and a
+ * `taskkill /T` would kill the switch halfway through.
  */
 export async function stopShell({
   current, paths, list = listProcesses, kill = killTree, timeoutMs = 10000,
+  protect = [process.pid],
 }) {
   const processes = await list()
   const targets = current === 'client'
@@ -59,10 +62,27 @@ export async function stopShell({
       ...processes.filter((process) => isElectronShell(process, paths)),
     ]
     : processes.filter((process) => isWebHost(process, paths))
+  const targetIds = new Set(targets.map((target) => Number(target.pid)))
+  const blocked = new Set(protect.map(Number))
   const killed = []
+  const done = new Set()
+
+  const end = async (pid, options) => {
+    if (blocked.has(pid) || done.has(pid)) return
+    done.add(pid)
+    await kill(pid, options)
+    killed.push(pid)
+  }
+
   for (const target of targets) {
-    await kill(target.pid, { force: true, timeoutMs })
-    killed.push(target.pid)
+    const pid = Number(target.pid)
+    // Support processes first, so a dying parent cannot orphan them.
+    const children = collectDescendants([pid], processes, { protect })
+      .filter((child) => child !== pid && !targetIds.has(child))
+    for (const child of children.reverse()) {
+      await end(child, { force: true, timeoutMs: 0, tree: false })
+    }
+    await end(pid, { force: true, timeoutMs, tree: false })
   }
   return killed
 }
@@ -202,5 +222,5 @@ export async function currentHostPort({ paths, state, list = listProcesses, port
 /** Report what is running right now. */
 export async function status({ paths, list = listProcesses, state }) {
   const current = await detectCurrent({ paths, list })
-  return { current, pid: state?.pid ?? null, port: state?.port ?? null }
+  return { current, pid: state?.pid ?? null, port: state?.port ?? null, url: state?.url ?? null }
 }

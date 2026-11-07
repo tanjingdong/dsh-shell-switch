@@ -5,7 +5,7 @@ import { assertInstalled, resolvePaths } from './paths.mjs'
 import { reservePort } from './ports.mjs'
 import { readState, writeState } from './state.mjs'
 import { fetchBusy, currentHostPort, detectCurrent, startClient, status, stopEverything, switchTo } from './launcher.mjs'
-import { startWeb } from './web.mjs'
+import { startWeb, showUrlDialog } from './web.mjs'
 
 const COMMANDS = ['menu', 'client', 'web', 'status', 'stop']
 
@@ -33,6 +33,14 @@ export function stopNotice(current, now = false) {
   if (current !== 'client') return null
   if (now) return '正在立即结束桌面客户端：未保存的内容会丢失'
   return '正在关闭桌面客户端：未保存的内容可能丢失；要立即结束请加 --now'
+}
+
+/** One status line, including the token url when the state recorded one. */
+export function statusLine(info = {}) {
+  const current = info.current ?? '没有外壳在运行'
+  const port = info.port ? `（端口 ${info.port}）` : ''
+  const url = info.url ? `\n地址：${info.url}` : ''
+  return `当前：${current}${port}${url}`
 }
 
 /** The no-argument menu. */
@@ -103,7 +111,7 @@ export async function run(argv = process.argv.slice(2), overrides = {}) {
 
   if (resolved === 'status') {
     const info = await status({ paths, state })
-    write(`当前：${info.current ?? '没有外壳在运行'}${info.port ? `（端口 ${info.port}）` : ''}`)
+    write(statusLine(info))
     return 0
   }
 
@@ -141,12 +149,13 @@ export async function run(argv = process.argv.slice(2), overrides = {}) {
     startWeb: async ({ port }) => {
       const result = await startWeb({
         paths, port, addresses: LAN_ADDRESSES, log: write,
+        notifyUrl: ({ url }) => showUrlDialog({ url }),
         onSpawn: (pid) => writeState(paths.stateFile, {
           mode: 'web', pid, port, startedAt: new Date().toISOString(),
         }),
       })
       await writeState(paths.stateFile, {
-        mode: 'web', pid: result.pid, port: result.port,
+        mode: 'web', pid: result.pid, port: result.port, url: result.url,
         relayPid: result.relayPid, startedAt: new Date().toISOString(),
       })
       return result

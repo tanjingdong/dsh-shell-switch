@@ -1,6 +1,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { PROCESS_QUERY, isDesktopHost, isElectronShell, isWebHost, killTree, listListeningPorts, listProcesses } from '../src/procs.mjs'
+import {
+  PROCESS_QUERY, collectDescendants, isDesktopHost, isElectronShell, isWebHost, killTree,
+  listListeningPorts, listProcesses,
+} from '../src/procs.mjs'
 
 const paths = {
   desktopProfile: 'C:\\u\\.dsh\\profiles\\desktop',
@@ -41,9 +44,35 @@ test('listListeningPorts reads the listening ports owned by one pid', async () =
   assert.match(seen[0].join(' '), /4321/)
 })
 
+test('the process query carries parent pids so a tree can be walked', () => {
+  assert.match(PROCESS_QUERY, /ParentProcessId/)
+  assert.match(PROCESS_QUERY, /ProcessId/)
+})
+
+test('listProcesses keeps the parent pid', async () => {
+  const run = async () => ({ stdout: JSON.stringify({ ProcessId: 7, ParentProcessId: 3, Name: 'a.exe', CommandLine: 'x' }) })
+  assert.deepEqual(await listProcesses(run), [{ pid: 7, parentPid: 3, name: 'a.exe', commandLine: 'x' }])
+})
+
+test('collectDescendants walks the tree and never returns a protected pid', () => {
+  const processes = [
+    { pid: 1, parentPid: 0 }, { pid: 2, parentPid: 1 }, { pid: 3, parentPid: 2 }, { pid: 4, parentPid: 1 },
+  ]
+  assert.deepEqual(collectDescendants([1], processes), [1, 2, 4, 3])
+  assert.deepEqual(collectDescendants([1], processes, { protect: [2] }), [1, 4])
+})
+
+test('killTree can end one process without a tree kill', async () => {
+  const calls = []
+  const list = async () => [{ pid: 1 }]
+  const kill = async (pid, mode, options) => { calls.push([mode, options]) }
+  await assert.rejects(killTree(1, { force: true, timeoutMs: 0, list, kill, tree: false }), /无法结束进程/)
+  assert.deepEqual(calls, [['graceful', { tree: false }], ['force', { tree: false }]])
+})
+
 test('listProcesses tolerates a single-object JSON payload', async () => {
-  const run = async () => ({ stdout: JSON.stringify({ ProcessId: 7, Name: 'a.exe', CommandLine: 'x' }) })
-  assert.deepEqual(await listProcesses(run), [{ pid: 7, name: 'a.exe', commandLine: 'x' }])
+  const run = async () => ({ stdout: JSON.stringify({ ProcessId: 7, ParentProcessId: 1, Name: 'a.exe', CommandLine: 'x' }) })
+  assert.deepEqual(await listProcesses(run), [{ pid: 7, parentPid: 1, name: 'a.exe', commandLine: 'x' }])
 })
 
 test('listProcesses throws instead of pretending nothing is running', async () => {

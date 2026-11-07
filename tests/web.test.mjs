@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
-import { buildWebArgs, extractTokenUrl, waitReady, startWeb, stopWeb } from '../src/web.mjs'
+import { buildWebArgs, extractTokenUrl, showUrlDialog, waitReady, startWeb, stopWeb } from '../src/web.mjs'
 
 function fakeChild(lines) {
   const child = new EventEmitter()
@@ -109,6 +109,58 @@ test('startWeb kills the host and the relay when the relay cannot start', async 
     /relay refused/,
   )
   assert.deepEqual(killed, [[123, { force: true }]])
+})
+
+test('startWeb hands the token url to the notifier after opening it', async () => {
+  const order = []
+  const child = fakeChild(['dsh web: http://127.0.0.1:3080/?token=abc'])
+  await startWeb({
+    paths: { cliJs: 'c', exe: 'e' },
+    port: 3080,
+    addresses: [],
+    spawnProcess: () => child,
+    wait: async () => true,
+    spawnRelay: async () => ({ pid: 1 }),
+    openBrowser: () => order.push('open'),
+    notifyUrl: ({ url }) => { order.push(`notify:${url}`) },
+  })
+  assert.deepEqual(order, ['open', 'notify:http://127.0.0.1:3080/?token=abc'])
+})
+
+test('a failing url dialog never tears down a host that is already up', async () => {
+  const child = fakeChild(['dsh web: http://127.0.0.1:3080/?token=abc'])
+  const result = await startWeb({
+    paths: { cliJs: 'c', exe: 'e' },
+    port: 3080,
+    addresses: [],
+    spawnProcess: () => child,
+    wait: async () => true,
+    spawnRelay: async () => ({ pid: 1 }),
+    openBrowser: () => {},
+    notifyUrl: async () => { throw new Error('no dialog') },
+  })
+  assert.equal(result.port, 3080)
+  assert.equal(result.relayPid, 1)
+})
+
+test('showUrlDialog copies the url and shows it in a message box', () => {
+  let call = null
+  const child = { pid: 12, unref: () => {} }
+  showUrlDialog({
+    url: 'http://127.0.0.1:3080/?token=abc',
+    env: {},
+    spawnProcess: (file, args, options) => {
+      call = { file, args, options }
+      return child
+    },
+  })
+  assert.equal(call.file, 'powershell.exe')
+  const script = call.args.join(' ')
+  assert.match(script, /Set-Clipboard/)
+  assert.match(script, /MessageBox/)
+  assert.equal(call.options.env.DSH_SWITCH_URL, 'http://127.0.0.1:3080/?token=abc')
+  assert.equal(call.options.detached, true)
+  assert.equal(call.options.stdio, 'ignore')
 })
 
 test('stopWeb kills the relay process before the host', async () => {

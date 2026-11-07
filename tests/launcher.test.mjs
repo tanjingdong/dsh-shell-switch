@@ -154,6 +154,26 @@ test('startClient surfaces a readiness failure instead of reporting success', as
   )
 })
 
+test('stopShell never kills its own process while ending the shell tree', async () => {
+  const killed = []
+  const processes = [
+    { pid: 10, parentPid: 0, commandLine: '"C:\\l\\DeepSeek Harness.exe"' },
+    { pid: 20, parentPid: 10, commandLine: 'x\\dsh-desktop-host\\lib\\index.js C:\\u\\.dsh\\profiles\\desktop' },
+    { pid: 21, parentPid: 20, commandLine: 'node src\\cli.mjs web --force' },
+    { pid: 22, parentPid: 20, commandLine: 'node mcp-server.js' },
+  ]
+  const ids = await stopShell({
+    current: 'client',
+    paths: clientPaths,
+    list: async () => processes,
+    kill: async (pid, options) => { killed.push([pid, options]) },
+    protect: [21],
+  })
+  assert.deepEqual(killed.map(([pid]) => pid), [22, 20, 10])
+  assert.ok(killed.every(([, options]) => options.tree === false))
+  assert.equal(ids.includes(21), false)
+})
+
 test('waitForClient waits until the desktop host listens and reports the port', async () => {
   let calls = 0
   const result = await waitForClient({

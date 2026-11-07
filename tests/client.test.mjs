@@ -97,6 +97,15 @@ test('the panel sets its own readable colors instead of inheriting the host them
   assert.notEqual(style.color.trim().toLowerCase(), style.background.trim().toLowerCase())
 })
 
+test('the sidebar trigger keeps the host text color so the arrow stays visible', () => {
+  const tree = renderEntry(loadBundle())
+  const trigger = find(tree, (node) => (
+    node?.type === 'button' && node?.props?.['aria-label'] === '切换外壳'
+  ))
+  assert.ok(trigger, 'the sidebar trigger must render')
+  assert.equal(trigger.props.style.color, 'inherit')
+})
+
 test('the panel offers both shells and a close action', () => {
   const words = texts(renderEntry(loadBundle()))
   assert.ok(words.includes('切换外壳'), `panel title missing: ${JSON.stringify(words)}`)

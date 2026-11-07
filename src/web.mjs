@@ -70,6 +70,33 @@ function defaultOpen(url) {
   spawn('cmd', ['/c', 'start', '', url], { windowsHide: true, detached: true, stdio: 'ignore' }).unref()
 }
 
+/**
+ * The token url is the only way into the host, and the host is detached from
+ * the launcher's console, so put it somewhere a human can copy it: clipboard
+ * plus a dialog. The url travels through the environment, so no quoting bugs.
+ */
+const URL_DIALOG_SCRIPT = [
+  'Add-Type -AssemblyName System.Windows.Forms',
+  '$u = $env:DSH_SWITCH_URL',
+  'Set-Clipboard -Value $u',
+  '[void][System.Windows.Forms.MessageBox]::Show('
+  + '"浏览器 Web 已启动。`n`n$u`n`n地址已复制到剪贴板，可直接粘贴到浏览器。", '
+  + '"DSH 外壳切换", '
+  + '[System.Windows.Forms.MessageBoxButtons]::OK, '
+  + '[System.Windows.Forms.MessageBoxIcon]::Information)',
+].join('; ')
+
+export function showUrlDialog({ url, spawnProcess = spawn, env = process.env } = {}) {
+  const child = spawnProcess('powershell.exe', ['-NoProfile', '-Command', URL_DIALOG_SCRIPT], {
+    env: { ...env, DSH_SWITCH_URL: String(url ?? '') },
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true,
+  })
+  child.unref()
+  return { pid: child.pid }
+}
+
 function withTimeout(promise, ms, code) {
   let timer
   const timeout = new Promise((_, reject) => {
@@ -86,7 +113,7 @@ function withTimeout(promise, ms, code) {
 export async function startWeb({
   paths, port, addresses = [], spawnProcess = defaultSpawn, wait = waitReady,
   spawnRelay = defaultSpawnRelay, openBrowser = defaultOpen, kill = killTree,
-  onSpawn = async () => {}, tokenTimeoutMs = 15000, log = () => {},
+  onSpawn = async () => {}, notifyUrl = async () => {}, tokenTimeoutMs = 15000, log = () => {},
 }) {
   const child = spawnProcess(paths, buildWebArgs({ port, addresses }))
   let relayPid = null
@@ -111,6 +138,13 @@ export async function startWeb({
     const url = await withTimeout(urlPromise, tokenTimeoutMs, 'no-token-url')
     relayPid = (await spawnRelay({ targetPort: port, listenPort: port, addresses, log }))?.pid ?? null
     openBrowser(url)
+    try {
+      await notifyUrl({ url, relayPid })
+    } catch (error) {
+      // The url also lives in state and the log; a failed dialog must not
+      // tear down a host that is already listening.
+      log(`[web] 无法显示地址对话框：${error?.message ?? error}`)
+    }
     return { pid: child.pid, port, url, relayPid, child }
   } catch (error) {
     if (relayPid) await kill(relayPid, { force: true }).catch(() => {})

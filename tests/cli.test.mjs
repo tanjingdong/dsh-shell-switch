@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseArgs, renderMenu, stopNotice, switchWithConsent } from '../src/cli.mjs'
+import { parseArgs, renderMenu, statusLine, stopNotice, switchWithConsent } from '../src/cli.mjs'
 
 test('parseArgs defaults to menu and accepts --force and --now', () => {
   assert.deepEqual(parseArgs([]), { command: 'menu', force: false, now: false })
@@ -23,6 +23,14 @@ test('renderMenu lists the four choices', () => {
   assert.match(menu, /2\).*Web/)
   assert.match(menu, /3\).*状态/)
   assert.match(menu, /4\).*停止/)
+})
+
+test('statusLine prints the token url so it can be copied later', () => {
+  assert.equal(
+    statusLine({ current: 'web', port: 3080, url: 'http://127.0.0.1:3080/?token=a' }),
+    '当前：web（端口 3080）\n地址：http://127.0.0.1:3080/?token=a',
+  )
+  assert.equal(statusLine({ current: null, port: null, url: null }), '当前：没有外壳在运行')
 })
 
 test('the menu retries a busy switch with force only after confirmation', async () => {
