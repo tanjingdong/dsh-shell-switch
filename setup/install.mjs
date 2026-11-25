@@ -1,25 +1,10 @@
-import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { assertInstalled, resolvePaths } from '../src/paths.mjs'
 import { detectCurrent } from '../src/launcher.mjs'
+import { runCli } from './run-cli.mjs'
 
 // One package now: the bundle lives at the repository root.
 const PLUGIN_DIR = fileURLToPath(new URL('..', import.meta.url))
-
-/** Run the CLI, capturing stdout so the dump can be inspected. */
-function runCli(file, args) {
-  return new Promise((resolve) => {
-    let stdout = ''
-    const child = spawn(file, args, {
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
-      stdio: ['ignore', 'pipe', 'inherit'],
-      windowsHide: true,
-    })
-    child.stdout.on('data', (chunk) => { stdout += chunk.toString() })
-    child.on('error', () => resolve({ code: 1, stdout }))
-    child.on('exit', (code) => resolve({ code: code ?? 1, stdout }))
-  })
-}
 
 /**
  * Install the plugin into the desktop profile, then prove it lands where both

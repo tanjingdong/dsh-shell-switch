@@ -1,12 +1,12 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { noopNotice, parseArgs, preferredPortFor, renderMenu, statusLine, stopNotice, stopResultLine, stopStartLine, switchWithConsent } from '../src/cli.mjs'
+import { noopNotice, parseArgs, preferredPortFor, renderMenu, statusJson, statusLine, stopNotice, stopResultLine, stopStartLine, switchWithConsent } from '../src/cli.mjs'
 
 test('parseArgs defaults to menu and accepts --force and --now', () => {
-  assert.deepEqual(parseArgs([]), { command: 'menu', force: false, now: false })
-  assert.deepEqual(parseArgs(['web', '--force']), { command: 'web', force: true, now: false })
-  assert.deepEqual(parseArgs(['client']), { command: 'client', force: false, now: false })
-  assert.deepEqual(parseArgs(['stop', '--now']), { command: 'stop', force: false, now: true })
+  assert.deepEqual(parseArgs([]), { command: 'menu', force: false, now: false, json: false })
+  assert.deepEqual(parseArgs(['web', '--force']), { command: 'web', force: true, now: false, json: false })
+  assert.deepEqual(parseArgs(['client']), { command: 'client', force: false, now: false, json: false })
+  assert.deepEqual(parseArgs(['stop', '--now']), { command: 'stop', force: false, now: true, json: false })
   assert.throws(() => parseArgs(['nope']), (e) => e.code === 'bad-args')
 })
 
@@ -23,6 +23,16 @@ test('renderMenu lists the four choices', () => {
   assert.match(menu, /2\).*Web/)
   assert.match(menu, /3\).*状态/)
   assert.match(menu, /4\).*停止/)
+})
+
+test('status can be asked for machine-readable output', () => {
+  assert.equal(parseArgs(['status', '--json']).json, true)
+  assert.equal(parseArgs(['status']).json, false)
+  assert.deepEqual(
+    statusJson({ current: 'web', port: 3080, url: 'http://h/?token=t' }),
+    { current: 'web', port: 3080, url: 'http://h/?token=t' },
+  )
+  assert.deepEqual(statusJson({}), { current: null, port: null, url: null })
 })
 
 test('stop announces itself before the wait, so the window is never blank', () => {

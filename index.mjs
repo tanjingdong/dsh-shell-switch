@@ -8,7 +8,7 @@ import { profileHealth } from './src/health.mjs'
 import { resolvePaths } from './src/paths.mjs'
 import { buildWebhookBody, sendWebhook } from './src/report.mjs'
 import { readReportConfig, reportConfigFile } from './src/report-config.mjs'
-import { createDesktopShortcut } from './src/shortcut.mjs'
+import { createDesktopShortcut, shortcutSpec } from './src/shortcut.mjs'
 import { createHandoffRoutes } from './routes.mjs'
 
 export const name = 'dsh-shell-switch'
@@ -16,13 +16,9 @@ export const inject = ['webServer']
 
 const REPO_ROOT = fileURLToPath(new URL('.', import.meta.url))
 
-/**
- * The desktop shortcut runs the menu wrapper, not the bare launcher: the
- * wrapper waits for a key so a window opened by a double click stays readable.
- */
-export function shortcutSpec(root = REPO_ROOT) {
-  return { target: path.join(root, 'dsh-switch-menu.cmd'), dir: root }
-}
+// Re-exported for the route wiring and for tests; the implementation moved to
+// src/shortcut.mjs so the installer does not have to import the plugin host.
+export { shortcutSpec }
 
 const LAUNCHER_CLI = fileURLToPath(new URL('./src/cli.mjs', import.meta.url))
 const LAUNCHER_CWD = path.dirname(path.dirname(LAUNCHER_CLI))

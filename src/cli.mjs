@@ -16,17 +16,28 @@ const COMMANDS = ['menu', 'client', 'web', 'status', 'stop']
 export function parseArgs(argv = []) {
   let force = false
   let now = false
+  let json = false
   const positional = []
   for (const arg of argv) {
     if (arg === '--force') force = true
     else if (arg === '--now') now = true
+    else if (arg === '--json') json = true
     else positional.push(arg)
   }
   const command = positional[0] ?? 'menu'
   if (!COMMANDS.includes(command)) {
     throw new LauncherError('bad-args', `未知命令：${command}。可用：${COMMANDS.join(' / ')}`)
   }
-  return { command, force, now }
+  return { command, force, now, json }
+}
+
+/** Machine-readable status, for the setup scripts and anything else scripted. */
+export function statusJson(info = {}) {
+  return {
+    current: info.current ?? null,
+    port: info.port ?? null,
+    url: info.url ?? null,
+  }
 }
 
 /** What to warn before stopping the desktop client, if anything. */
@@ -163,7 +174,8 @@ export async function switchWithConsent(target, deps, {
 
 /** Run one command and return the process exit code. */
 export async function run(argv = process.argv.slice(2), overrides = {}) {
-  const { command, force, now } = overrides.parsed ?? parseArgs(argv)
+  const parsed = overrides.parsed ?? parseArgs(argv)
+  const { command, force, now, json } = parsed
   const paths = overrides.paths ?? resolvePaths()
   assertInstalled(paths)
   const logger = overrides.logger ?? createLogger({ paths })
@@ -173,7 +185,7 @@ export async function run(argv = process.argv.slice(2), overrides = {}) {
 
   if (resolved === 'status') {
     const info = await status({ paths, state })
-    write(statusLine(info))
+    write(json ? JSON.stringify(statusJson(info)) : statusLine(info))
     return 0
   }
 

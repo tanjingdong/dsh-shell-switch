@@ -18,27 +18,77 @@ DSH 的桌面客户端和 Web 版默认各用一套 profile，插件、设置、
 
 - Windows 10/11
 - 已安装 DeepSeek Harness 桌面版（默认在 `%LOCALAPPDATA%\Programs\DeepSeek Harness`）
-- 需要 `node`（PATH 里没有时会回退到 `%USERPROFILE%\.dsh\plugins\rea-bundle\vendor\node\node.exe`）
+- Node.js 可选：装了就用它，没装则使用 DSH 自带的运行时，**不是必需的**
 
-## 安装
+## 安装（新设备）
 
-**两个外壳都必须先关闭**（菜单第 4 项，或 `dsh-switch stop`）。
+前置条件：
 
-```powershell
-# 1) 备份原 web 目录并建立联接；已有联接时是幂等的
-node setup\cutover.mjs
+- Windows 10/11；
+- 已装好 DeepSeek Harness **桌面版**，并且**至少启动过一次**（否则 `%USERPROFILE%\.dsh\profiles\desktop` 不存在）；
+- **不需要安装 Node.js**：脚本会用 DSH 自带的运行时执行。
 
-# 2) 把插件装进 desktop profile，并用 --profile web --dump-config 验证
-node setup\install.mjs
+### 第 1 步：下载
+
+打开 <https://github.com/tanjingdong/dsh-shell-switch/releases/latest>，在 **Assets** 里点 **Source code (zip)**。
+不要选 `tar.gz`——Windows 自带解压不认这个格式。
+
+如果 Windows 提示"文件来自其他计算机，可能被阻止"，先右键那个 zip → 属性 → 勾选**解除锁定**，再解压。
+
+### 第 2 步：解压到固定位置
+
+解压后会得到一个 `dsh-shell-switch-<版本号>` 这样的目录。把它放到一个以后不会随手删的地方，例如：
+
+```
+%USERPROFILE%\dsh-shell-switch
 ```
 
-然后重启桌面客户端，侧栏底部会出现「⇄」按钮。
+也就是 `C:\Users\你的用户名\dsh-shell-switch`。
 
-如果 `profiles\web` 还没有联接，**配置页顶部会直接提示并给出可复制的命令**；联接建立后这条提示自动消失。
-插件不会自己去改 profile 布局——那是全局改动，只应该由你明确执行。
+**这个目录就是插件的安装位置，以后不能移动、改名或删除**——插件是以 `link:` 方式注册到 profile 的，路径一变插件就失效。
 
-> 联接是**全局改动**：`profiles\web` 从此指向 `profiles\desktop`。想退回去见文末「回滚」。
+### 第 3 步：双击 `install.cmd`
 
+`install.cmd` 只做一件事：找一个能跑 JavaScript 的运行时（PATH 里的 `node`，没有就用 DeepSeek Harness 自带的），
+然后把实际工作交给 `setup\wizard.mjs`。**全程没有 PowerShell**。
+
+它会依次做这些事，每一步都打印结果：
+
+1. 找到 DeepSeek Harness（装在别处就设环境变量 `DSH_APP` 指向 `DeepSeek Harness.exe`）；
+2. 检查 `profiles\desktop` 是否存在；
+3. 如果检测到外壳正在运行，问你要不要停止它（回答 `y` 停止，直接回车则取消、什么也不改）；
+4. 建立 profile 联接（`web` → `desktop`，原目录自动备份为 `web.bak-<时间戳>`）；
+5. 把插件装进 desktop profile，并用 `--profile web --dump-config` 验证；
+6. 在桌面创建「DSH 外壳切换」快捷方式（指向 `dsh-switch-menu.cmd`，双击进菜单）；
+7. 完成后按任意回车关闭窗口。
+
+一切正常时会看到：
+
+```
+==> 把插件装进 desktop profile
+
+安装完成。
+现在启动桌面客户端，侧栏底部应该出现切换按钮。
+```
+
+### 第 4 步：启动并确认
+
+```powershell
+.\dsh-switch.cmd client
+```
+
+桌面客户端起来后，**侧栏底部会出现「⇄」按钮**。进「插件 → dsh-shell-switch → 配置」可以设置上报方式、勾选要发布的网卡、创建桌面快捷方式。
+
+### 卸载
+
+双击同一个目录里的 **`uninstall.cmd`**：它会移除插件、删掉本插件创建的那个桌面快捷方式（同名但不是它建的会保留），
+并询问是否把 `web` 回滚成之前的备份。插件目录本身可以直接删除。
+
+### 升级
+
+把新版本的 zip 解压后**覆盖**这个目录里的文件，重启一次外壳即可（路径不变，`link:` 不用重装）。若新版本改动了插件入口，再双击一次 `install.cmd`。
+
+> 联接是**全局改动**：`profiles\web` 从此指向 `profiles\desktop`。回滚见文末「回滚」。
 ## 使用
 
 ```powershell

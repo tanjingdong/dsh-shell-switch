@@ -1,6 +1,6 @@
 {
   "name": "dsh-shell-switch",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Switch the DeepSeek Harness between its desktop client and the browser Web GUI over one shared profile, and report each switch where you want it.",
   "private": false,
   "type": "module",
@@ -19,6 +19,10 @@
     "setup",
     "dsh-switch.cmd",
     "dsh-switch-menu.cmd",
+    "install.cmd",
+    "install.ps1",
+    "uninstall.cmd",
+    "uninstall.ps1",
     "CHANGELOG.md"
   ],
   "scripts": {

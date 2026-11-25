@@ -2,6 +2,23 @@
 
 本项目遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## 1.0.1 — 2026-11-25
+
+### 新增
+
+- **一键安装**：解压后双击 `install.cmd` 即可。脚本自动定位 DeepSeek Harness、检查 profile、
+  检测正在运行的外壳并询问是否停止、建立联接、安装插件并验证、**在桌面创建启动器快捷方式**；
+  **不需要安装 Node.js**，没装 node 时会使用 DSH 自带的运行时。
+- **一键卸载**：双击 `uninstall.cmd`，移除插件、删掉本插件创建的桌面快捷方式
+  （同名但不是它建的会保留），并询问是否把 `web` 回滚成备份。
+- `dsh-switch status --json`：给脚本用的机器可读输出。
+
+### 说明
+
+- 装配逻辑全部在 `setup/wizard.mjs`（普通 JavaScript），`install.cmd` / `uninstall.cmd`
+  只负责挑运行时。最初的 PowerShell 版本已删除：Windows PowerShell 5.1 不等待 GUI 子进程，
+  导致输出与退出码为空，且 `Test-Path` 看不进 `app.asar` 内部。
+
 ## 1.0.0 — 2026-11-08
 
 首个公开版本。
